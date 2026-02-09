@@ -1,18 +1,12 @@
-//
-//  NutriSnapApp.swift
-//  NutriSnap
-//
-//  Created by Tsz Wing on 13/1/2026.
-//
-
 import SwiftUI
 import SwiftData
 
 @main
 struct NutriSnapApp: App {
+    // 1. Define the container for your FoodLog model
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            FoodLog.self, // <--- Make sure FoodLog is listed here!
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
@@ -25,8 +19,10 @@ struct NutriSnapApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            DashboardView()
         }
+        // 2. Inject it into the window
         .modelContainer(sharedModelContainer)
     }
 }
+

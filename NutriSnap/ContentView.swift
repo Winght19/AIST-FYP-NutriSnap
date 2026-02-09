@@ -10,16 +10,17 @@ import SwiftData
 
 struct ContentView: View {
     @Environment(\.modelContext) private var modelContext
-    @Query private var items: [Item]
+    // Query the FoodLog, not Item
+    @Query private var logs: [FoodLog]
 
     var body: some View {
         NavigationSplitView {
             List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))")
-                    } label: {
-                        Text(item.timestamp, format: Date.FormatStyle(date: .numeric, time: .standard))
+                ForEach(logs) { log in
+                    HStack {
+                        Text(log.foodName)
+                        Spacer()
+                        Text("\(Int(log.Calories)) kcal")
                     }
                 }
                 .onDelete(perform: deleteItems)
@@ -41,21 +42,17 @@ struct ContentView: View {
 
     private func addItem() {
         withAnimation {
-            let newItem = Item(timestamp: Date())
-            modelContext.insert(newItem)
+            // Create a fake food entry to test the database
+            let newFood = FoodLog(name: "Test Apple", calories: 52, protein: 0.3, carbs: 14)
+            modelContext.insert(newFood)
         }
     }
 
     private func deleteItems(offsets: IndexSet) {
         withAnimation {
             for index in offsets {
-                modelContext.delete(items[index])
+                modelContext.delete(logs[index])
             }
         }
     }
-}
-
-#Preview {
-    ContentView()
-        .modelContainer(for: Item.self, inMemory: true)
 }
