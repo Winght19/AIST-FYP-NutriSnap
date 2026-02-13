@@ -8,6 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		25829F112F1CC1A200650029 /* NutriSnap_icon.icon in Resources */ = {isa = PBXBuildFile; fileRef = 25829F102F1CC1A200650029 /* NutriSnap_icon.icon */; };
+		2582A0942F3A1A1B00650029 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 2582A0932F3A1A1B00650029 /* GoogleSignIn */; };
+		2582A0962F3A1A1B00650029 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = 2582A0952F3A1A1B00650029 /* GoogleSignInSwift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -34,9 +36,22 @@
 		25829F102F1CC1A200650029 /* NutriSnap_icon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = NutriSnap_icon.icon; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		2582A0982F3A1B9000650029 /* Exceptions for "NutriSnap" folder in "NutriSnap" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 25829EC32F160E8300650029 /* NutriSnap */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		25829EC62F160E8300650029 /* NutriSnap */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				2582A0982F3A1B9000650029 /* Exceptions for "NutriSnap" folder in "NutriSnap" target */,
+			);
 			path = NutriSnap;
 			sourceTree = "<group>";
 		};
@@ -67,6 +82,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				2582A0942F3A1A1B00650029 /* GoogleSignIn in Frameworks */,
+				2582A0962F3A1A1B00650029 /* GoogleSignInSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -133,6 +150,8 @@
 			);
 			name = NutriSnap;
 			packageProductDependencies = (
+				2582A0932F3A1A1B00650029 /* GoogleSignIn */,
+				2582A0952F3A1A1B00650029 /* GoogleSignInSwift */,
 			);
 			productName = NutriSnap;
 			productReference = 25829EC42F160E8300650029 /* NutriSnap.app */;
@@ -213,6 +232,9 @@
 			);
 			mainGroup = 25829EBB2F160E8300650029;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				2582A0922F3A1A1B00650029 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 25829EC52F160E8300650029 /* Products */;
 			projectDirPath = "";
@@ -418,6 +440,7 @@
 				DEVELOPMENT_TEAM = NPUCQ4V22Q;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = NutriSnap/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = NutriSnap;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -458,6 +481,7 @@
 				DEVELOPMENT_TEAM = NPUCQ4V22Q;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = NutriSnap/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = NutriSnap;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -607,6 +631,30 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		2582A0922F3A1A1B00650029 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 9.1.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		2582A0932F3A1A1B00650029 /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2582A0922F3A1A1B00650029 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+		2582A0952F3A1A1B00650029 /* GoogleSignInSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 2582A0922F3A1A1B00650029 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignInSwift;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 25829EBC2F160E8300650029 /* Project object */;
 }

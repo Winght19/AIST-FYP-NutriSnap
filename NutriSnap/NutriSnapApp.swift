@@ -1,8 +1,11 @@
 import SwiftUI
 import SwiftData
+import GoogleSignIn
 
 @main
 struct NutriSnapApp: App {
+    @State private var authManager = AuthenticationManager()
+    
     // 1. Define the container for your FoodLog model
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
@@ -19,7 +22,20 @@ struct NutriSnapApp: App {
 
     var body: some Scene {
         WindowGroup {
-            DashboardView()
+            Group {
+                if authManager.isSignedIn && authManager.hasCompletedOnboarding {
+                    DashboardView()
+                } else if authManager.isSignedIn {
+                    OnboardingView()
+                } else {
+                    LandingView()
+                }
+            }
+            .environment(authManager)
+            .onOpenURL { url in
+                // Handle the Google Sign-In redirect URL
+                GIDSignIn.sharedInstance.handle(url)
+            }
         }
         // 2. Inject it into the window
         .modelContainer(sharedModelContainer)

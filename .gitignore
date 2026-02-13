@@ -1,0 +1,27 @@
+# --- Xcode ---
+# specific to your local machine
+build/
+DerivedData/
+
+# User-specific project settings
+*.xcuserdata
+*.mode1v3
+*.mode2v3
+*.pbuser
+*.perspectivev3
+*.xccheckout
+*.moved-aside
+
+# --- macOS System ---
+.DS_Store
+
+# --- Swift Package Manager ---
+.build/
+.swiftpm/xcode/
+
+# --- CocoaPods (If you use them) ---
+# Pods/
+
+# --- Fastlane (If you use it) ---
+fastlane/report.xml
+fastlane/screenshots

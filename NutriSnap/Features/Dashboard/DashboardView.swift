@@ -76,6 +76,7 @@ struct DashboardView: View {
 
 // 2. THE HOME SCREEN (Header + Rings + Meals)
 struct HomeView: View {
+    @Environment(AuthenticationManager.self) var authManager
     @Query private var logs: [FoodLog]
     @State private var currentPage = 0 // For tracking the current slide in the carousel
     @Binding var selectedTab: Int
@@ -176,7 +177,7 @@ struct HomeView: View {
         .safeAreaInset(edge: .top) {
             HStack {
                 VStack(alignment: .leading) {
-                    Text("Good Morning, Wing")
+                    Text("Good Morning, \(authManager.userName.components(separatedBy: " ").first ?? "there")")
                         .font(.title2)
                         .fontWeight(.bold)
                     Text("Today, \(Date().formatted(.dateTime.month().day()))")
@@ -626,4 +627,5 @@ struct ActiveCaloriesCard: View {
 
 #Preview {
     DashboardView()
+        .environment(AuthenticationManager())
 }
