@@ -568,8 +568,8 @@ struct FoodRecognitionCameraView: View {
                             foodName: food,
                             capturedImage: capturedImage,
                             baseNutrition: nutrition,
-                            onSave: { finalNutrition, servings, editedName in
-                                print("Saved: \(editedName) - \(finalNutrition) - \(servings) servings")
+                            onSave: { finalNutrition, servings, editedName, savedDate, mealType in
+                                print("Saved: \(editedName) - \(finalNutrition) - \(servings) servings on \(savedDate) [\(mealType)]")
                                 pipeline.reset()
                                 nutritionPipeline.reset()
                                 capturedImage = nil

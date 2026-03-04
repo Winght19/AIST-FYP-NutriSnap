@@ -467,7 +467,7 @@ struct NutritionConfirmationView: View {
     let foodName: String
     let capturedImage: UIImage?
     let baseNutrition: NutritionData
-    let onSave: (NutritionData, Double, String) -> Void
+    let onSave: (NutritionData, Double, String, Date, String) -> Void
     let onDelete: () -> Void
     
     @State private var servings: Double = 1.0
@@ -475,10 +475,14 @@ struct NutritionConfirmationView: View {
     @State private var isEditingFoodName: Bool = false
     @State private var selectedDate: Date = Date()
     @State private var showDatePicker: Bool = false
+    @State private var selectedTime: Date = Date()
+    @State private var showTimePicker: Bool = false
+    @State private var selectedMealType: String = "Meal"
     @State private var editedCalories: String = ""
     @State private var editedProtein: String = ""
     @State private var editedCarbs: String = ""
     @State private var editedFat: String = ""
+    @State private var editedMass: String = ""
     @FocusState private var focusedNutritionField: String?
     @FocusState private var isFoodNameFocused: Bool
     
@@ -488,7 +492,7 @@ struct NutritionConfirmationView: View {
             protein: Double(editedProtein) ?? baseNutrition.protein,
             carbohydrates: Double(editedCarbs) ?? baseNutrition.carbohydrates,
             fat: Double(editedFat) ?? baseNutrition.fat,
-            mass: baseNutrition.mass * servings
+            mass: Double(editedMass) ?? baseNutrition.mass * servings
         )
     }
     
@@ -496,6 +500,38 @@ struct NutritionConfirmationView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "dd/MM/yyyy"
         return formatter.string(from: selectedDate)
+    }
+    
+    private var currentTimeString: String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: selectedTime)
+    }
+    
+    private var combinedDateTime: Date {
+        let calendar = Calendar.current
+        let dateComponents = calendar.dateComponents([.year, .month, .day], from: selectedDate)
+        let timeComponents = calendar.dateComponents([.hour, .minute], from: selectedTime)
+        var combined = DateComponents()
+        combined.year = dateComponents.year
+        combined.month = dateComponents.month
+        combined.day = dateComponents.day
+        combined.hour = timeComponents.hour
+        combined.minute = timeComponents.minute
+        return calendar.date(from: combined) ?? selectedDate
+    }
+    
+    private let mealTypeOptions = ["Breakfast", "Lunch", "Tea", "Dinner", "Late Night", "Snack"]
+    
+    private func defaultMealType(for time: Date) -> String {
+        let hour = Calendar.current.component(.hour, from: time)
+        switch hour {
+        case 5..<11: return "Breakfast"
+        case 11..<15: return "Lunch"
+        case 15..<18: return "Tea"
+        case 18..<22: return "Dinner"
+        default: return "Late Night"
+        }
     }
     
     var body: some View {
@@ -545,10 +581,10 @@ struct NutritionConfirmationView: View {
                                     .foregroundColor(.gray)
                             )
                     }
-                    
-                    VStack(spacing: 20) {
+
+                    VStack(spacing: 14) {
                         // MARK: - Food Name & Date
-                        HStack {
+                        HStack(alignment: .center) {
                             HStack(spacing: 8) {
                                 Image(systemName: "pencil")
                                     .font(.system(size: 16))
@@ -579,14 +615,38 @@ struct NutritionConfirmationView: View {
                             
                             Spacer()
                             
-                            Text(currentDateString)
-                                .font(.subheadline)
-                                .foregroundColor(.gray)
-                                .onTapGesture {
-                                    showDatePicker = true
-                                }
+                            HStack(spacing: 6) {
+                                Text(currentDateString)
+                                    .font(.subheadline)
+                                    .foregroundColor(.gray)
+                                    .onTapGesture {
+                                        showDatePicker = true
+                                    }
+                                Text(currentTimeString)
+                                    .font(.subheadline)
+                                    .foregroundColor(.gray)
+                                    .onTapGesture {
+                                        showTimePicker = true
+                                    }
+                            }
                         }
-                        .padding(.top, 16)
+                        
+                        // MARK: - Mass Display
+                        HStack(spacing: 4) {
+                            TextField("0", text: $editedMass)
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .keyboardType(.decimalPad)
+                                .multilineTextAlignment(.leading)
+                                .fixedSize()
+                                .focused($focusedNutritionField, equals: "mass")
+                            Text("g")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                            Spacer()
+                        }
+                        .onTapGesture { focusedNutritionField = "mass" }
+                      
                         .sheet(isPresented: $showDatePicker) {
                             VStack(spacing: 0) {
                                 HStack {
@@ -605,6 +665,29 @@ struct NutritionConfirmationView: View {
                                 )
                                 .datePickerStyle(.graphical)
                                 .tint(Color(red: 0.85, green: 0.55, blue: 0.55))
+                                .padding()
+                                Spacer()
+                            }
+                            .presentationDetents([.medium])
+                        }
+                        .sheet(isPresented: $showTimePicker) {
+                            VStack(spacing: 0) {
+                                HStack {
+                                    Spacer()
+                                    Button("Done") {
+                                        showTimePicker = false
+                                    }
+                                    .font(.body.weight(.semibold))
+                                    .foregroundColor(Color(red: 0.85, green: 0.55, blue: 0.55))
+                                    .padding()
+                                }
+                                DatePicker(
+                                    "Select Time",
+                                    selection: $selectedTime,
+                                    displayedComponents: .hourAndMinute
+                                )
+                                .datePickerStyle(.wheel)
+                                .labelsHidden()
                                 .padding()
                                 Spacer()
                             }
@@ -654,8 +737,40 @@ struct NutritionConfirmationView: View {
                         .background(Color.gray.opacity(0.1))
                         .cornerRadius(25)
                         
+                        // MARK: - Meal Type Selector
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack {
+                                Text("Meal Type")
+                                    .font(.title3.weight(.bold))
+                                    .foregroundColor(.black)
+                                Spacer()
+                            }
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 8) {
+                                    ForEach(mealTypeOptions, id: \.self) { type in
+                                        Button(action: { selectedMealType = type }) {
+                                            Text(type)
+                                                .font(.subheadline.weight(.medium))
+                                                .foregroundColor(
+                                                    selectedMealType == type
+                                                        ? .white
+                                                        : Color(red: 0.85, green: 0.55, blue: 0.55)
+                                                )
+                                                .padding(.horizontal, 16)
+                                                .padding(.vertical, 8)
+                                                .background(
+                                                    selectedMealType == type
+                                                        ? Color(red: 0.85, green: 0.55, blue: 0.55)
+                                                        : Color(red: 0.85, green: 0.55, blue: 0.55).opacity(0.1)
+                                                )
+                                                .cornerRadius(20)
+                                        }
+                                    }
+                                }
+                            }
+                        }
                         // MARK: - Nutrition Section
-                        VStack(spacing: 16) {
+                        VStack(spacing: 14) {
                             HStack {
                                 Text("Nutrition")
                                     .font(.title3.weight(.bold))
@@ -704,6 +819,7 @@ struct NutritionConfirmationView: View {
                         }
                     }
                     .padding(.horizontal, 24)
+                    .padding(.top, 16)
                 }
             }
             
@@ -720,7 +836,7 @@ struct NutritionConfirmationView: View {
                 }
                 
                 Button(action: {
-                    onSave(scaledNutrition, servings, editedFoodName)
+                    onSave(scaledNutrition, servings, editedFoodName, combinedDateTime, selectedMealType)
                 }) {
                     Text("Save")
                         .font(.body.weight(.semibold))
@@ -749,6 +865,11 @@ struct NutritionConfirmationView: View {
             editedProtein = String(format: "%.1f", baseNutrition.protein)
             editedCarbs = String(format: "%.1f", baseNutrition.carbohydrates)
             editedFat = String(format: "%.1f", baseNutrition.fat)
+            editedMass = String(format: "%.0f", baseNutrition.mass)
+            selectedMealType = defaultMealType(for: selectedTime)
+        }
+        .onChange(of: selectedTime) { _, newTime in
+            selectedMealType = defaultMealType(for: newTime)
         }
     }
     
@@ -765,6 +886,9 @@ struct NutritionConfirmationView: View {
         }
         if let fat = Double(editedFat) {
             editedFat = String(format: "%.1f", fat * ratio)
+        }
+        if let mass = Double(editedMass) {
+            editedMass = String(format: "%.0f", mass * ratio)
         }
     }
     
@@ -811,7 +935,7 @@ struct NutritionConfirmationView: View {
             fat: 11,
             mass: 350
         ),
-        onSave: { _, _, _ in },
+        onSave: { _, _, _, _, _ in },
         onDelete: { }
     )
 }

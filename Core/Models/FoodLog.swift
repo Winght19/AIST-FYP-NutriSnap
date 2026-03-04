@@ -1,9 +1,7 @@
 //
 //  FoodLog.swift
 //  NutriSnap
-//
-//  Created by Tsz Wing on 17/1/2026.
-//
+
 
 import Foundation
 import SwiftData
@@ -13,6 +11,8 @@ final class FoodLog {
     var id: UUID
     var timestamp: Date
     var foodName: String
+    var mealType: String = "Meal"
+    var mass: Double = 0
     
     // For syncing to backend later
     var imagePath: String?
@@ -53,11 +53,16 @@ final class FoodLog {
             protein: Double = 0,
             carbs: Double = 0,
             fat: Double = 0,
-            imagePath: String? = nil
+            imagePath: String? = nil,
+            timestamp: Date = Date(),
+            mealType: String = "Meal",
+            mass: Double = 0
         ) {
             self.id = UUID()
-            self.timestamp = Date()
+            self.timestamp = timestamp
             self.foodName = name
+            self.mealType = mealType
+            self.mass = mass
             self.Calories = calories
             self.Protein = protein
             self.Carbohydrate = carbs

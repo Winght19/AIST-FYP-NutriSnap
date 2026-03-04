@@ -220,7 +220,7 @@ struct CameraView: View {
                             foodName: food,
                             capturedImage: capturedImage,
                             baseNutrition: nutrition,
-                            onSave: { finalNutrition, servings, editedName in
+                            onSave: { finalNutrition, servings, editedName, savedDate, mealType in
                                 // Save image to Documents directory
                                 var savedImagePath: String? = nil
                                 if let image = capturedImage,
@@ -237,7 +237,10 @@ struct CameraView: View {
                                     protein: finalNutrition.protein,
                                     carbs: finalNutrition.carbohydrates,
                                     fat: finalNutrition.fat,
-                                    imagePath: savedImagePath
+                                    imagePath: savedImagePath,
+                                    timestamp: savedDate,
+                                    mealType: mealType,
+                                    mass: finalNutrition.mass
                                 )
                                 modelContext.insert(log)
                                 pipeline.reset()
