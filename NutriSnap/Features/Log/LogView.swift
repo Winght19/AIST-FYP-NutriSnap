@@ -1,8 +1,34 @@
 import SwiftUI
+import SwiftData
 
 struct LogsView: View {
+    @Query private var allLogs: [FoodLog]
     @State private var selectedDate = Date()
     @State private var showDatePicker = false
+
+    var logsForSelectedDate: [FoodLog] {
+        let calendar = Calendar.current
+        return allLogs
+            .filter { calendar.isDate($0.timestamp, inSameDayAs: selectedDate) }
+            .sorted { $0.timestamp < $1.timestamp }
+    }
+
+    private func timeString(from date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
+    }
+
+    private func mealType(from date: Date) -> String {
+        let hour = Calendar.current.component(.hour, from: date)
+        switch hour {
+        case 5..<11: return "BREAKFAST"
+        case 11..<15: return "LUNCH"
+        case 15..<18: return "SNACK"
+        case 18..<22: return "DINNER"
+        default: return "MEAL"
+        }
+    }
     
     var body: some View {
         VStack(spacing: 0) {
@@ -44,35 +70,34 @@ struct LogsView: View {
             // Card-based meal list
             ScrollView {
                 VStack(spacing: 16) {
-                    LogEntryRow(
-                        time: "08:30",
-                        mealType: "BREAKFAST",
-                        foodName: "Oatmeal with Fresh Berries",
-                        calories: 320,
-                        protein: 12,
-                        carbs: 45,
-                        fat: 6
-                    )
-                    
-                    LogEntryRow(
-                        time: "13:15",
-                        mealType: "LUNCH",
-                        foodName: "Chicken Salad Sandwich",
-                        calories: 450,
-                        protein: 28,
-                        carbs: 38,
-                        fat: 14
-                    )
-                    
-                    LogEntryRow(
-                        time: "16:40",
-                        mealType: "SNACK",
-                        foodName: "Apple with Almond Butter",
-                        calories: 180,
-                        protein: 4,
-                        carbs: 22,
-                        fat: 9
-                    )
+                    if logsForSelectedDate.isEmpty {
+                        VStack(spacing: 12) {
+                            Image(systemName: "fork.knife")
+                                .font(.system(size: 40))
+                                .foregroundColor(.gray.opacity(0.4))
+                            Text("No meals logged")
+                                .font(.headline)
+                                .foregroundColor(.secondary)
+                            Text("Tap + to add a meal")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 80)
+                    } else {
+                        ForEach(logsForSelectedDate) { log in
+                            LogEntryRow(
+                                time: timeString(from: log.timestamp),
+                                mealType: mealType(from: log.timestamp),
+                                foodName: log.foodName,
+                                calories: Int(log.Calories),
+                                protein: Int(log.Protein),
+                                carbs: Int(log.Carbohydrate),
+                                fat: Int(log.Fat),
+                                imagePath: log.imagePath
+                            )
+                        }
+                    }
                 }
                 .padding(16)
             }
@@ -117,6 +142,12 @@ struct LogEntryRow: View {
     let protein: Int
     let carbs: Int
     let fat: Int
+    var imagePath: String? = nil
+
+    private var loadedImage: UIImage? {
+        guard let path = imagePath else { return nil }
+        return UIImage(contentsOfFile: path)
+    }
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -143,10 +174,19 @@ struct LogEntryRow: View {
                     .fill(Color.gray.opacity(0.15))
                     .frame(width: 100, height: 100)
                     .overlay(
-                        Image(systemName: "photo")
-                            .font(.title)
-                            .foregroundColor(.gray.opacity(0.5))
+                        Group {
+                            if let uiImage = loadedImage {
+                                Image(uiImage: uiImage)
+                                    .resizable()
+                                    .scaledToFill()
+                            } else {
+                                Image(systemName: "photo")
+                                    .font(.title)
+                                    .foregroundColor(.gray.opacity(0.5))
+                            }
+                        }
                     )
+                    .clipShape(RoundedRectangle(cornerRadius: 16))
                 
                 // Food details
                 VStack(alignment: .leading, spacing: 12) {

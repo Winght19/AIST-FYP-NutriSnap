@@ -22,6 +22,7 @@ final class FoodLog {
     var Protein: Double
     var Carbohydrate: Double
     var Calories: Double
+    var Fat: Double
     var Fiber: Double
     var Calcium: Double
     var Iron: Double
@@ -51,7 +52,8 @@ final class FoodLog {
             calories: Double,
             protein: Double = 0,
             carbs: Double = 0,
-            fat: Double = 0
+            fat: Double = 0,
+            imagePath: String? = nil
         ) {
             self.id = UUID()
             self.timestamp = Date()
@@ -59,6 +61,8 @@ final class FoodLog {
             self.Calories = calories
             self.Protein = protein
             self.Carbohydrate = carbs
+            self.Fat = fat
+            self.imagePath = imagePath
             
             // Default everything else to 0 so we don't have a giant list every time
             self.Fiber = 0
