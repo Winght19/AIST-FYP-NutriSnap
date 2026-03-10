@@ -17,6 +17,9 @@ struct UserProfileDTO: Codable {
     let primaryGoal: String?
     let exerciseHoursPerWeek: Int?
     let allergens: [String]?
+    let preferredCuisines: [String]?
+    let preferredMealTypes: [String]?
+    let preferredDiets: [String]?
 
     // Backend-computed nutrition targets (nil until onboarding computes them)
     let dailyCalorieGoal: Double?
@@ -36,6 +39,7 @@ struct UserProfileDTO: Codable {
         case googleSub, email, name, isProfileComplete
         case dateOfBirth, weightKg, heightCm, gender
         case primaryGoal, exerciseHoursPerWeek, allergens
+        case preferredCuisines, preferredMealTypes, preferredDiets
         case dailyCalorieGoal, proteinGoal, carbsGoal, fatGoal
         case createdAt, lastModifiedAt
     }
@@ -51,4 +55,7 @@ struct OnboardingProfileDTO: Codable {
     let primaryGoal: String
     let exerciseHoursPerWeek: Int
     let allergens: [String]
+    let preferredCuisines: [String]
+    let preferredMealTypes: [String]
+    let preferredDiets: [String]
 }

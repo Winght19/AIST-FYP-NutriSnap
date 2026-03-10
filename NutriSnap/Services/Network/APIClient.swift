@@ -30,7 +30,9 @@ final class APIClient {
     static let shared = APIClient()
 
     // Replace with your backend base URL before deploying.
-    let baseURL = "https://sqgwalooucvabofnjrcx.supabase.co/functions/v1"
+    let functionsURL = "https://sqgwalooucvabofnjrcx.supabase.co/functions/v1"
+    let restURL = "https://sqgwalooucvabofnjrcx.supabase.co/rest/v1"
+    let supabaseAnonKey = "sb_publishable_ggAjJwrTalHfCM9w1-ZQKw_1ed6KuRg"
 
     private lazy var encoder: JSONEncoder = {
         let e = JSONEncoder()
@@ -88,17 +90,23 @@ final class APIClient {
     // MARK: - Public Methods
 
     func get<T: Decodable>(_ endpoint: String, token: String?) async throws -> T {
-        try await execute(endpoint: endpoint, method: "GET", bodyData: nil, token: token)
+        try await execute(endpoint: endpoint, method: "GET", bodyData: nil, token: token, isREST: false)
     }
 
     func post<T: Decodable, B: Encodable>(_ endpoint: String, body: B, token: String?) async throws -> T {
         let data = try encoder.encode(body)
-        return try await execute(endpoint: endpoint, method: "POST", bodyData: data, token: token)
+        return try await execute(endpoint: endpoint, method: "POST", bodyData: data, token: token, isREST: false)
     }
 
     func put<T: Decodable, B: Encodable>(_ endpoint: String, body: B, token: String?) async throws -> T {
         let data = try encoder.encode(body)
-        return try await execute(endpoint: endpoint, method: "PUT", bodyData: data, token: token)
+        return try await execute(endpoint: endpoint, method: "PUT", bodyData: data, token: token, isREST: false)
+    }
+
+    // MARK: - REST Methods
+
+    func restGet<T: Decodable>(_ endpoint: String, token: String? = nil) async throws -> T {
+        try await execute(endpoint: endpoint, method: "GET", bodyData: nil, token: token, isREST: true)
     }
 
     // MARK: - Private Core
@@ -107,18 +115,27 @@ final class APIClient {
         endpoint: String,
         method: String,
         bodyData: Data?,
-        token: String?
+        token: String?,
+        isREST: Bool
     ) async throws -> T {
-        guard let url = URL(string: baseURL + endpoint) else {
+        let basePath = isREST ? restURL : functionsURL
+        guard let url = URL(string: basePath + endpoint) else {
             throw APIError.invalidURL
         }
 
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // Supabase requires the anon key in the apikey header for REST
+        if isREST {
+            request.setValue(supabaseAnonKey, forHTTPHeaderField: "apikey")
+        }
 
         if let token {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        } else if isREST {
+            request.setValue("Bearer \(supabaseAnonKey)", forHTTPHeaderField: "Authorization")
         }
 
         if let bodyData {

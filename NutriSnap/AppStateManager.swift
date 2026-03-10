@@ -180,6 +180,9 @@ final class AppStateManager {
         user.primaryGoal = dto.primaryGoal
         user.exerciseHoursPerWeek = dto.exerciseHoursPerWeek
         user.allergens = dto.allergens ?? user.allergens
+        user.preferredCuisines = dto.preferredCuisines ?? user.preferredCuisines
+        user.preferredMealTypes = dto.preferredMealTypes ?? user.preferredMealTypes
+        user.preferredDiets = dto.preferredDiets ?? user.preferredDiets
         user.dailyCalorieGoal = dto.dailyCalorieGoal ?? user.dailyCalorieGoal
         user.proteinGoal = dto.proteinGoal ?? user.proteinGoal
         user.carbsGoal = dto.carbsGoal ?? user.carbsGoal

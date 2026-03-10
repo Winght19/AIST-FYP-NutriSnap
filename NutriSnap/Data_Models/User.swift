@@ -24,7 +24,10 @@ class User {
     var gender: String?
     var primaryGoal: String?
     var exerciseHoursPerWeek: Int?
-    var allergens: [String]
+    var allergens: [String] = []
+    var preferredCuisines: [String] = []
+    var preferredMealTypes: [String] = []
+    var preferredDiets: [String] = []
 
     // MARK: - Derived (not stored — always accurate regardless of when it is read)
     var age: Int? {
@@ -52,6 +55,9 @@ class User {
         self.name = name
         self.createdAt = Date()
         self.allergens = []
+        self.preferredCuisines = []
+        self.preferredMealTypes = []
+        self.preferredDiets = []
         self.dailyCalorieGoal = 2000
         self.proteinGoal = 150
         self.carbsGoal = 250

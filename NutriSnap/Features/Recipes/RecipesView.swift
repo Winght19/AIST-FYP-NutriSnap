@@ -1,10 +1,8 @@
 import SwiftUI
 
 struct RecipesView: View {
-    @State private var searchText = ""
-    @State private var selectedFilter = "All"
-    
-    let filters = ["All", "Quick & Easy", "Vegetarian"]
+    @State private var viewModel = RecipesViewModel()
+    @State private var showFilter = false
     
     var body: some View {
         NavigationView {
@@ -14,13 +12,16 @@ struct RecipesView: View {
                     HStack {
                         Image(systemName: "magnifyingglass")
                             .foregroundColor(.gray)
-                        TextField("Search recipes", text: $searchText)
+                        TextField("Search recipes", text: $viewModel.searchText)
+                            .onSubmit {
+                                Task { await viewModel.fetchRecipes() }
+                            }
                     }
                     .padding(12)
                     .background(Color(uiColor: .secondarySystemGroupedBackground))
                     .cornerRadius(12)
                     
-                    Button(action: {}) {
+                    Button(action: { showFilter = true }) {
                         Image(systemName: "slider.horizontal.3")
                             .font(.title3)
                             .foregroundColor(.primary)
@@ -31,30 +32,15 @@ struct RecipesView: View {
                 }
                 .padding(.horizontal)
                 .padding(.top, 8)
-                
-                // Filter Pills
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 12) {
-                        ForEach(filters, id: \.self) { filter in
-                            Button(action: { selectedFilter = filter }) {
-                                Text(filter)
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                    .padding(.horizontal, 20)
-                                    .padding(.vertical, 10)
-                                    .background(selectedFilter == filter ? Color.green.opacity(0.3) : Color(.systemGray6))
-                                    .foregroundColor(selectedFilter == filter ? .primary : .secondary)
-                                    .cornerRadius(20)
-                            }
-                        }
-                    }
-                    .padding(.horizontal)
-                }
-                .padding(.vertical, 12)
+                .padding(.bottom, 16)
                 
                 // Results Count
                 HStack {
-                    Text("7594 results")
+                    if viewModel.isLoading {
+                        ProgressView()
+                            .padding(.trailing, 8)
+                    }
+                    Text("\(viewModel.recipes.count) results")
                         .font(.subheadline)
                         .fontWeight(.semibold)
                     Spacer()
@@ -65,29 +51,16 @@ struct RecipesView: View {
                 // Recipe Grid
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
-                        RecipeCard(
-                            imageName: "spaghetti",
-                            title: "Authentic Spaghetti",
-                            difficulty: "Easy"
-                        )
-                        
-                        RecipeCard(
-                            imageName: "ramen",
-                            title: "Saucy Ramen Noodles",
-                            difficulty: "Easy"
-                        )
-                        
-                        RecipeCard(
-                            imageName: "steak",
-                            title: "Bavette Steak & Roasted Garlic Pan Sauce",
-                            difficulty: "Normal"
-                        )
-                        
-                        RecipeCard(
-                            imageName: "salad",
-                            title: "Chickpea Feta Avocado Salad",
-                            difficulty: "Easy"
-                        )
+                        ForEach(viewModel.recipes) { recipe in
+                            NavigationLink(destination: RecipeDetailView(recipeId: recipe.id)) {
+                                RecipeCard(
+                                    title: recipe.title,
+                                    cuisine: recipe.cuisine?.name ?? "Unknown",
+                                    difficulty: recipe.difficulty?.name ?? "Unknown"
+                                )
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
                     }
                     .padding(.horizontal)
                     .padding(.bottom, 100)
@@ -104,40 +77,54 @@ struct RecipesView: View {
                 }
             }
         }
+        .sheet(isPresented: $showFilter) {
+            RecipeFilterView(viewModel: viewModel)
+                .presentationDetents([.fraction(0.85)]) // Makes it a large bottom sheet
+                .presentationBackground(.clear)
+        }
+        .task {
+            await viewModel.fetchRecipes()
+        }
     }
 }
 
 struct RecipeCard: View {
-    let imageName: String
     let title: String
+    let cuisine: String
     let difficulty: String
     
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // Recipe Image
-            RoundedRectangle(cornerRadius: 16)
-                .fill(Color.gray.opacity(0.3))
-                .frame(height: 140)
-                .overlay(
-                    Image(systemName: "photo")
-                        .font(.largeTitle)
-                        .foregroundColor(.gray)
-                )
-            
             // Recipe Title
             Text(title)
                 .font(.subheadline)
                 .fontWeight(.semibold)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
+                .frame(height: 44, alignment: .topLeading)
             
-            // Difficulty
-            Text(difficulty)
-                .font(.caption)
-                .foregroundColor(.secondary)
+            // Cuisine & Difficulty
+            HStack {
+                Text(cuisine.capitalized)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                Text(difficulty)
+                    .font(.caption2)
+                    .fontWeight(.bold)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.green.opacity(0.2))
+                    .foregroundColor(.green)
+                    .cornerRadius(4)
+            }
         }
+        .padding(12)
         .background(Color(uiColor: .secondarySystemGroupedBackground))
         .cornerRadius(16)
+        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
     }
 }
 

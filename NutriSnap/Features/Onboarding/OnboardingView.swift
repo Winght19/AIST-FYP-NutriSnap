@@ -108,7 +108,10 @@ struct OnboardingView: View {
                 gender: onboardingData.gender,
                 primaryGoal: onboardingData.primaryGoal,
                 exerciseHoursPerWeek: onboardingData.exerciseHours,
-                allergens: Array(onboardingData.selectedAllergens)
+                allergens: Array(onboardingData.selectedAllergens),
+                preferredCuisines: [],
+                preferredMealTypes: [],
+                preferredDiets: []
             )
             await appStateManager.completeOnboarding(with: profileDTO, modelContext: modelContext)
 

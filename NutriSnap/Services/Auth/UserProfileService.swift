@@ -29,6 +29,6 @@ final class UserProfileService {
 
     /// Updates an already-complete user profile (e.g. after the user edits their settings).
     func updateProfile(_ profile: OnboardingProfileDTO, token: String) async throws -> UserProfileDTO {
-        try await apiClient.put("/user-profile", body: profile, token: token)
+        try await apiClient.post("/user-onboarding", body: profile, token: token)
     }
 }

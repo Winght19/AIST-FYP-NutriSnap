@@ -1,10 +1,20 @@
 import SwiftUI
 import SwiftData
 
+enum ProfileEditType: Identifiable {
+    case cuisine, mealType, diet, allergens
+    var id: Int { hashValue }
+}
+
 struct ProfileView: View {
     @Environment(AppStateManager.self) private var appStateManager
     @Environment(\.modelContext) private var modelContext
-
+    
+    @State private var activeSheet: ProfileEditType? = nil
+    
+    // Shared ViewModel just for its static filter arrays
+    @State private var recipesViewModel = RecipesViewModel()
+    
     var body: some View {
         NavigationView {
             ScrollView {
@@ -61,19 +71,35 @@ struct ProfileView: View {
                             .padding(.bottom, 16)
 
                         VStack(spacing: 0) {
-                            PreferenceRow(icon: "fork.knife", title: "Cuisine",
-                                         subtitle: "Chinese, Japanese", iconColor: .pink)
+                            Button(action: { activeSheet = .cuisine }) {
+                                let cText = appStateManager.currentUser?.preferredCuisines.joined(separator: ", ") ?? ""
+                                PreferenceRow(icon: "fork.knife", title: "Cuisine",
+                                             subtitle: cText.isEmpty ? "None" : cText, iconColor: .pink)
+                            }
+                            
                             Divider().padding(.leading, 80)
-                            PreferenceRow(icon: "takeoutbag.and.cup.and.straw", title: "Meal Type",
-                                         subtitle: "Breakfast, Dinner, Snack", iconColor: .pink)
+                            
+                            Button(action: { activeSheet = .mealType }) {
+                                let mText = appStateManager.currentUser?.preferredMealTypes.joined(separator: ", ") ?? ""
+                                PreferenceRow(icon: "takeoutbag.and.cup.and.straw", title: "Meal Type",
+                                             subtitle: mText.isEmpty ? "None" : mText, iconColor: .pink)
+                            }
+                            
                             Divider().padding(.leading, 80)
-                            PreferenceRow(icon: "leaf", title: "Diet",
-                                         subtitle: "Vegan", iconColor: .pink)
+                            
+                            Button(action: { activeSheet = .diet }) {
+                                let dText = appStateManager.currentUser?.preferredDiets.joined(separator: ", ") ?? ""
+                                PreferenceRow(icon: "leaf", title: "Diet",
+                                             subtitle: dText.isEmpty ? "None" : dText, iconColor: .pink)
+                            }
+                            
                             Divider().padding(.leading, 80)
 
-                            let allergenText = appStateManager.currentUser?.allergens.joined(separator: ", ") ?? "None"
-                            PreferenceRow(icon: "exclamationmark.triangle", title: "Allergens",
-                                         subtitle: allergenText.isEmpty ? "None" : allergenText, iconColor: .pink)
+                            Button(action: { activeSheet = .allergens }) {
+                                let aText = appStateManager.currentUser?.allergens.joined(separator: ", ") ?? ""
+                                PreferenceRow(icon: "exclamationmark.triangle", title: "Allergens",
+                                             subtitle: aText.isEmpty ? "None" : aText, iconColor: .pink)
+                            }
                         }
                         .background(Color(uiColor: .secondarySystemGroupedBackground))
                         .cornerRadius(16)
@@ -112,6 +138,73 @@ struct ProfileView: View {
                             .foregroundColor(.primary)
                     }
                 }
+            }
+        }
+        .sheet(item: $activeSheet) { sheetType in
+            if let user = appStateManager.currentUser {
+                switch sheetType {
+                case .cuisine:
+                    let binding = Binding(
+                        get: { user.preferredCuisines },
+                        set: { user.preferredCuisines = $0 }
+                    )
+                    DietaryPreferenceEditView(title: "Cuisine", options: recipesViewModel.cuisines, selectedOptions: binding) {
+                        saveProfile(user: user)
+                    }
+                    
+                case .mealType:
+                    let binding = Binding(
+                        get: { user.preferredMealTypes },
+                        set: { user.preferredMealTypes = $0 }
+                    )
+                    DietaryPreferenceEditView(title: "Meal Type", options: recipesViewModel.mealTypes, selectedOptions: binding) {
+                        saveProfile(user: user)
+                    }
+                    
+                case .diet:
+                    let binding = Binding(
+                        get: { user.preferredDiets },
+                        set: { user.preferredDiets = $0 }
+                    )
+                    DietaryPreferenceEditView(title: "Diet", options: recipesViewModel.diets, selectedOptions: binding) {
+                        saveProfile(user: user)
+                    }
+                    
+                case .allergens:
+                    let binding = Binding(
+                        get: { user.allergens },
+                        set: { user.allergens = $0 }
+                    )
+                    DietaryPreferenceEditView(title: "Allergens", options: recipesViewModel.allergens, selectedOptions: binding) {
+                        saveProfile(user: user)
+                    }
+                }
+            }
+        }
+    }
+    
+    private func saveProfile(user: User) {
+        guard let token = KeychainManager.shared.retrieveToken() else { return }
+        
+        let dto = OnboardingProfileDTO(
+            dateOfBirth: user.dateOfBirth ?? Date(),
+            weightKg: user.weight ?? 70,
+            heightCm: user.height ?? 170,
+            gender: user.gender ?? "Other",
+            primaryGoal: user.primaryGoal ?? "Maintain Weight",
+            exerciseHoursPerWeek: user.exerciseHoursPerWeek ?? 3,
+            allergens: user.allergens,
+            preferredCuisines: user.preferredCuisines,
+            preferredMealTypes: user.preferredMealTypes,
+            preferredDiets: user.preferredDiets
+        )
+        
+        Task {
+            do {
+                _ = try await UserProfileService().updateProfile(dto, token: token)
+                print("Profile preferences saved successfully")
+            } catch {
+                print("Failed to save profile preferences: \(error)")
             }
         }
     }
