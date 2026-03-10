@@ -3,18 +3,18 @@ import Foundation
 
 @Model
 class Food {
-    @Attribute(.unique) var id: UUID
+    // MARK: - Core Fields
     var name: String
     var servingSize: Double
     var servingUnit: String
-      
-    // Nutrition totals
+
+    // MARK: - Macro Totals
     var calories: Double
     var protein: Double
     var carbs: Double
     var fat: Double
 
-     // Detailed nutrients
+    // MARK: - Detailed Nutrients
     var fiber: Double?
     var calcium: Double?
     var iron: Double?
@@ -37,10 +37,11 @@ class Food {
     var monounsaturatedFat: Double?
     var polyunsaturatedFat: Double?
     var sugar: Double?
+
+    // MARK: - Relationship
     var meal: Meal?
-    
+
     init(name: String, servingSize: Double = 1, servingUnit: String = "serving") {
-        self.id = UUID()
         self.name = name
         self.servingSize = servingSize
         self.servingUnit = servingUnit

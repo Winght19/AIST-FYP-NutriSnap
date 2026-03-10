@@ -1,27 +1,22 @@
-//
-//  FoodLog.swift
-//  NutriSnap
-//
-//  Created by Tsz Wing on 17/1/2026.
-//
-
 import Foundation
 import SwiftData
 
 @Model
 final class FoodLog {
-    var id: UUID
+    // MARK: - Cloud Sync Metadata
+    var remoteID: String?
+    var needsSync: Bool
+    var lastModifiedAt: Date
+
+    // MARK: - Core Fields
     var timestamp: Date
     var foodName: String
-    
-    // For syncing to backend later
     var imagePath: String?
-    
-    
-    //Nutrients
+
+    // MARK: - Nutrients
+    var Calories: Double
     var Protein: Double
     var Carbohydrate: Double
-    var Calories: Double
     var Fiber: Double
     var Calcium: Double
     var Iron: Double
@@ -44,45 +39,46 @@ final class FoodLog {
     var MonoUnsaturatedFat: Double
     var PolyUnsaturatedFat: Double
     var Sugar: Double
-    
-    // The Initializer (This is what you were missing!)
-        init(
-            name: String,
-            calories: Double,
-            protein: Double = 0,
-            carbs: Double = 0,
-            fat: Double = 0
-        ) {
-            self.id = UUID()
-            self.timestamp = Date()
-            self.foodName = name
-            self.Calories = calories
-            self.Protein = protein
-            self.Carbohydrate = carbs
-            
-            // Default everything else to 0 so we don't have a giant list every time
-            self.Fiber = 0
-            self.Calcium = 0
-            self.Iron = 0
-            self.Potassium = 0
-            self.Sodium = 0
-            self.Zinc = 0
-            self.VitaminA = 0
-            self.VitaminC = 0
-            self.VitaminD = 0
-            self.VitaminB1 = 0
-            self.VitaminB2 = 0
-            self.VitaminB3 = 0
-            self.VitaminB5 = 0
-            self.VitaminB6 = 0
-            self.VitaminB9 = 0
-            self.VitaminB12 = 0
-            self.Cholesterol = 0
-            self.TransFat = 0
-            self.SaturatedFat = 0
-            self.MonoUnsaturatedFat = 0
-            self.PolyUnsaturatedFat = 0
-            self.Sugar = 0
-        }
-    
+
+    // MARK: - Relationship
+    var user: User?
+
+    init(
+        name: String,
+        calories: Double,
+        protein: Double = 0,
+        carbs: Double = 0,
+        fat: Double = 0
+    ) {
+        self.remoteID = nil
+        self.needsSync = true
+        self.lastModifiedAt = Date()
+        self.timestamp = Date()
+        self.foodName = name
+        self.Calories = calories
+        self.Protein = protein
+        self.Carbohydrate = carbs
+        self.Fiber = 0
+        self.Calcium = 0
+        self.Iron = 0
+        self.Potassium = 0
+        self.Sodium = 0
+        self.Zinc = 0
+        self.VitaminA = 0
+        self.VitaminC = 0
+        self.VitaminD = 0
+        self.VitaminB1 = 0
+        self.VitaminB2 = 0
+        self.VitaminB3 = 0
+        self.VitaminB5 = 0
+        self.VitaminB6 = 0
+        self.VitaminB9 = 0
+        self.VitaminB12 = 0
+        self.Cholesterol = 0
+        self.TransFat = 0
+        self.SaturatedFat = 0
+        self.MonoUnsaturatedFat = 0
+        self.PolyUnsaturatedFat = 0
+        self.Sugar = 0
+    }
 }

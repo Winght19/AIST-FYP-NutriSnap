@@ -3,36 +3,55 @@ import Foundation
 
 @Model
 class User {
-    @Attribute(.unique) var id: UUID
-    @Attribute(.unique) var email: String
+    // MARK: - Cloud Sync Metadata
+    var remoteID: String?
+    var needsSync: Bool
+    var lastModifiedAt: Date
+
+    // MARK: - Profile State
+    var isProfileComplete: Bool
+
+    // MARK: - Identity (Google sub claim is the stable, immutable identifier)
+    @Attribute(.unique) var googleSub: String
+    var email: String
     var name: String
-    var passwordHash: String // Store hashed password (we'll add encryption later)
     var createdAt: Date
-    
-    // Profile
-    var age: Int?
-    var weight: Double? // kg
-    var height: Double? // cm
+
+    // MARK: - Physical Profile
+    var dateOfBirth: Date?
+    var weight: Double?            // kg
+    var height: Double?            // cm
     var gender: String?
-    var activityLevel: String?
-    
-    // Goals
+    var primaryGoal: String?
+    var exerciseHoursPerWeek: Int?
+    var allergens: [String]
+
+    // MARK: - Derived (not stored — always accurate regardless of when it is read)
+    var age: Int? {
+        guard let dateOfBirth else { return nil }
+        return Calendar.current.dateComponents([.year], from: dateOfBirth, to: Date()).year
+    }
+
+    // MARK: - Computed Goals (backend-calculated after onboarding)
     var dailyCalorieGoal: Double
     var proteinGoal: Double
     var carbsGoal: Double
     var fatGoal: Double
-    
-    // Relationships
-    @Relationship(deleteRule: .cascade) var meals: [Meal]?
-    
-    init(email: String, name: String, passwordHash: String) {
-        self.id = UUID()
+
+    // MARK: - Relationships
+    @Relationship(deleteRule: .cascade, inverse: \Meal.user) var meals: [Meal]?
+    @Relationship(deleteRule: .cascade, inverse: \FoodLog.user) var foodLogs: [FoodLog]?
+
+    init(googleSub: String, email: String, name: String) {
+        self.remoteID = nil
+        self.needsSync = true
+        self.lastModifiedAt = Date()
+        self.isProfileComplete = false
+        self.googleSub = googleSub
         self.email = email.lowercased()
         self.name = name
-        self.passwordHash = passwordHash
         self.createdAt = Date()
-        
-        // Default goals
+        self.allergens = []
         self.dailyCalorieGoal = 2000
         self.proteinGoal = 150
         self.carbsGoal = 250

@@ -10,8 +10,11 @@ extension UIScreen {
 
 // 1. THE MAIN CONTAINER (Tab Bar)
 struct DashboardView: View {
+    @Environment(AppStateManager.self) private var appStateManager
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab = 0
-    
+
     init() {
         let appearance = UITabBarAppearance()
         appearance.configureWithDefaultBackground()
@@ -70,13 +73,19 @@ struct DashboardView: View {
                 }
                 .tag(4)
         }
-        .tint(Color.red) // Matches your "Add" button color
+        .tint(Color.red)
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active else { return }
+            Task {
+                await appStateManager.handleForegroundActivation(modelContext: modelContext)
+            }
+        }
     }
 }
 
 // 2. THE HOME SCREEN (Header + Rings + Meals)
 struct HomeView: View {
-    @Environment(AuthenticationManager.self) var authManager
+    @Environment(AppStateManager.self) private var appStateManager
     @Query private var logs: [FoodLog]
     @State private var currentPage = 0 // For tracking the current slide in the carousel
     @Binding var selectedTab: Int
@@ -177,7 +186,7 @@ struct HomeView: View {
         .safeAreaInset(edge: .top) {
             HStack {
                 VStack(alignment: .leading) {
-                    Text("Good Morning, \(authManager.userName.components(separatedBy: " ").first ?? "there")")
+                    Text("Good Morning, \(appStateManager.currentUser?.name.components(separatedBy: " ").first ?? "there")")
                         .font(.title2)
                         .fontWeight(.bold)
                     Text("Today, \(Date().formatted(.dateTime.month().day()))")
@@ -627,5 +636,5 @@ struct ActiveCaloriesCard: View {
 
 #Preview {
     DashboardView()
-        .environment(AuthenticationManager())
+        .environment(AppStateManager())
 }

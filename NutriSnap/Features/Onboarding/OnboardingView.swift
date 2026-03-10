@@ -1,18 +1,20 @@
 import SwiftUI
+import SwiftData
 
 struct OnboardingView: View {
-    @Environment(AuthenticationManager.self) var authManager
+    @Environment(AppStateManager.self) private var appStateManager
+    @Environment(\.modelContext) private var modelContext
     @State private var currentStep = 0
     @State private var onboardingData = OnboardingData()
     @State private var isCreatingProfile = false
     @State private var isProfileReady = false
-    
+
     private let totalSteps = 6
-    
+
     var progress: CGFloat {
         CGFloat(currentStep + 1) / CGFloat(totalSteps)
     }
-    
+
     var body: some View {
         VStack(spacing: 0) {
             if !isCreatingProfile && !isProfileReady {
@@ -22,7 +24,7 @@ struct OnboardingView: View {
                         RoundedRectangle(cornerRadius: 2)
                             .fill(Color.gray.opacity(0.2))
                             .frame(height: 4)
-                        
+
                         RoundedRectangle(cornerRadius: 2)
                             .fill(Color(red: 0.90, green: 0.35, blue: 0.35))
                             .frame(width: geometry.size.width * progress, height: 4)
@@ -32,7 +34,7 @@ struct OnboardingView: View {
                 .frame(height: 4)
                 .padding(.horizontal, 24)
                 .padding(.top, 16)
-                
+
                 // Step content
                 TabView(selection: $currentStep) {
                     GenderStepView(
@@ -40,32 +42,32 @@ struct OnboardingView: View {
                         onContinue: nextStep
                     )
                     .tag(0)
-                    
+
                     HeightWeightStepView(
                         height: $onboardingData.height,
                         weight: $onboardingData.weight,
                         onContinue: nextStep
                     )
                     .tag(1)
-                    
+
                     GoalStepView(
                         selectedGoal: $onboardingData.primaryGoal,
                         onContinue: nextStep
                     )
                     .tag(2)
-                    
+
                     AgeStepView(
-                        age: $onboardingData.age,
+                        dateOfBirth: $onboardingData.dateOfBirth,
                         onContinue: nextStep
                     )
                     .tag(3)
-                    
+
                     ExerciseStepView(
                         exerciseHours: $onboardingData.exerciseHours,
                         onContinue: nextStep
                     )
                     .tag(4)
-                    
+
                     AllergenStepView(
                         selectedAllergens: $onboardingData.selectedAllergens,
                         onCreateProfile: createProfile
@@ -74,20 +76,19 @@ struct OnboardingView: View {
                 }
                 .tabViewStyle(.page(indexDisplayMode: .never))
                 .animation(.easeInOut(duration: 0.3), value: currentStep)
-                
+
             } else if isCreatingProfile {
                 ProfileCreatingView()
-                
+
             } else if isProfileReady {
                 ProfileReadyView(onStartTracking: {
-                    authManager.hasCompletedOnboarding = true
-                    UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+                    appStateManager.finishOnboarding()
                 })
             }
         }
         .background(Color(UIColor.systemBackground))
     }
-    
+
     private func nextStep() {
         withAnimation {
             if currentStep < totalSteps - 1 {
@@ -95,13 +96,28 @@ struct OnboardingView: View {
             }
         }
     }
-    
+
     private func createProfile() {
-        withAnimation {
-            isCreatingProfile = true
-        }
-        
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+        Task {
+            withAnimation { isCreatingProfile = true }
+
+            let profileDTO = OnboardingProfileDTO(
+                dateOfBirth: onboardingData.dateOfBirth ?? Date(),
+                weightKg: Double(onboardingData.weight),
+                heightCm: Double(onboardingData.height),
+                gender: onboardingData.gender,
+                primaryGoal: onboardingData.primaryGoal,
+                exerciseHoursPerWeek: onboardingData.exerciseHours,
+                allergens: Array(onboardingData.selectedAllergens)
+            )
+            await appStateManager.completeOnboarding(with: profileDTO, modelContext: modelContext)
+
+            // Only transition to the "ready" screen if the backend call succeeded.
+            // If completeOnboarding set appState to .error, RootView will show ErrorView instead.
+            if case .error = appStateManager.appState {
+                return  // RootView handles the error screen
+            }
+
             withAnimation {
                 isCreatingProfile = false
                 isProfileReady = true
@@ -489,35 +505,75 @@ struct GoalStepView: View {
     }
 }
 
-// MARK: - Step 4: Age
+// MARK: - Step 4: Date of Birth
 
 struct AgeStepView: View {
-    @Binding var age: Int
+    @Binding var dateOfBirth: Date?
     var onContinue: () -> Void
-    
-    @State private var showAgePicker = false
-    
+
+    @State private var showDatePicker = false
+    @State private var pendingDate: Date = {
+        // Default the wheel to a sensible starting point (22 years ago)
+        Calendar.current.date(byAdding: .year, value: -22, to: Date()) ?? Date()
+    }()
+
+    private var isValid: Bool { dateOfBirth != nil }
+
     var body: some View {
         ZStack {
             VStack(alignment: .leading, spacing: 0) {
                 Spacer().frame(height: 60)
-                
-                Text("Age")
+
+                Text("Date of Birth")
                     .font(.system(size: 32, weight: .bold))
                     .padding(.horizontal, 32)
-                
+
+                Spacer().frame(height: 8)
+
+                Text("Used to keep your calorie targets accurate as you age.")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 32)
+
                 Spacer().frame(height: 24)
-                
-                ValuePickerButton(
-                    placeholder: "e.g. 22",
-                    value: age,
-                    unit: "",
-                    action: { showAgePicker = true }
-                )
+
+                Button(action: { showDatePicker = true }) {
+                    HStack {
+                        if let dob = dateOfBirth {
+                            Text(dob, format: .dateTime.day().month(.wide).year())
+                                .font(.body)
+                                .foregroundColor(.primary)
+                        } else {
+                            Text("Select your date of birth")
+                                .font(.body)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "calendar")
+                            .foregroundColor(.secondary)
+                    }
+                    .padding()
+                    .background(Color(UIColor.secondarySystemGroupedBackground))
+                    .cornerRadius(12)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                    )
+                }
                 .padding(.horizontal, 32)
-                
+
+                Spacer().frame(height: 40)
+
+                HStack {
+                    Spacer()
+                    Image(systemName: "birthday.cake.fill")
+                        .font(.system(size: 70))
+                        .foregroundColor(Color(red: 0.40, green: 0.75, blue: 0.50).opacity(0.4))
+                    Spacer()
+                }
+
                 Spacer()
-                
+
                 Button(action: onContinue) {
                     Text("Continue")
                         .font(.headline)
@@ -525,26 +581,88 @@ struct AgeStepView: View {
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .frame(height: 52)
-                        .background(age > 0 ? Color(red: 0.40, green: 0.75, blue: 0.50) : Color.gray.opacity(0.4))
+                        .background(isValid ? Color(red: 0.40, green: 0.75, blue: 0.50) : Color.gray.opacity(0.4))
                         .cornerRadius(26)
                 }
-                .disabled(age <= 0)
+                .disabled(!isValid)
                 .padding(.horizontal, 32)
                 .safeAreaPadding(.bottom, 16)
             }
-            
-            if showAgePicker {
-                WheelPickerOverlay(
-                    title: "Age",
-                    unit: "years",
-                    range: 10...100,
-                    selection: $age,
-                    isPresented: $showAgePicker
+
+            if showDatePicker {
+                DatePickerOverlay(
+                    selection: $pendingDate,
+                    isPresented: $showDatePicker,
+                    onConfirm: { dateOfBirth = pendingDate }
                 )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .animation(.easeInOut(duration: 0.3), value: showAgePicker)
+        .animation(.easeInOut(duration: 0.3), value: showDatePicker)
+        .onAppear {
+            // Pre-load the wheel to the already-selected date if the user comes back
+            if let dob = dateOfBirth { pendingDate = dob }
+        }
+    }
+}
+
+// MARK: - Date Picker Overlay
+
+struct DatePickerOverlay: View {
+    @Binding var selection: Date
+    @Binding var isPresented: Bool
+    var onConfirm: () -> Void
+
+    private var maximumDate: Date {
+        // Must be at least 10 years old
+        Calendar.current.date(byAdding: .year, value: -10, to: Date()) ?? Date()
+    }
+    private var minimumDate: Date {
+        Calendar.current.date(byAdding: .year, value: -120, to: Date()) ?? Date()
+    }
+
+    var body: some View {
+        ZStack(alignment: .bottom) {
+            Color.black.opacity(0.3)
+                .ignoresSafeArea()
+                .onTapGesture { withAnimation { isPresented = false } }
+
+            VStack(spacing: 0) {
+                HStack {
+                    Button("Cancel") {
+                        withAnimation { isPresented = false }
+                    }
+                    .foregroundColor(.secondary)
+
+                    Spacer()
+
+                    Button("Confirm") {
+                        onConfirm()
+                        withAnimation { isPresented = false }
+                    }
+                    .fontWeight(.semibold)
+                    .foregroundColor(Color(red: 0.40, green: 0.75, blue: 0.50))
+                }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 14)
+
+                Divider()
+
+                DatePicker(
+                    "",
+                    selection: $selection,
+                    in: minimumDate...maximumDate,
+                    displayedComponents: .date
+                )
+                .datePickerStyle(.wheel)
+                .labelsHidden()
+                .padding(.horizontal, 20)
+            }
+            .background(Color(UIColor.systemBackground))
+            .cornerRadius(16, corners: [.topLeft, .topRight])
+            .shadow(color: .black.opacity(0.15), radius: 20, x: 0, y: -5)
+        }
+        .ignoresSafeArea(edges: .bottom)
     }
 }
 
@@ -809,5 +927,5 @@ struct ProfileReadyView: View {
 
 #Preview {
     OnboardingView()
-        .environment(AuthenticationManager())
+        .environment(AppStateManager())
 }
