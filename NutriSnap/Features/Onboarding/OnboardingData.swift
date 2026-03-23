@@ -14,8 +14,8 @@ class OnboardingData {
     // Step 3: Primary Goal
     var primaryGoal: String = ""
     
-    // Step 4: Age
-    var age: Int = 22
+    // Step 4: Date of Birth
+    var dateOfBirth: Date? = nil
     
     // Step 5: Exercise per week
     var exerciseHours: Int = 3
