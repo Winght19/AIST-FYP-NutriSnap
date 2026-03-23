@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Charts
 
 // MARK: - Screen Size Helper
 extension UIScreen {
@@ -93,6 +94,85 @@ struct HomeView: View {
     @Query private var logs: [FoodLog]
     @State private var currentPage = 0 // For tracking the current slide in the carousel
     @Binding var selectedTab: Int
+
+    private let targetCalories: Double = 2650
+    private let targetCarbs: Double = 330
+    private let targetProtein: Double = 132
+    private let targetFat: Double = 80
+
+    private var calendar: Calendar {
+        Calendar.current
+    }
+
+    private var todayLogs: [FoodLog] {
+        logs.filter { calendar.isDateInToday($0.timestamp) }
+    }
+
+    private var todayCalories: Double {
+        todayLogs.reduce(0) { $0 + $1.Calories }
+    }
+
+    private var todayCarbs: Double {
+        todayLogs.reduce(0) { $0 + $1.Carbohydrate }
+    }
+
+    private var todayProtein: Double {
+        todayLogs.reduce(0) { $0 + $1.Protein }
+    }
+
+    private var todayFat: Double {
+        todayLogs.reduce(0) { $0 + $1.Fat }
+    }
+
+    private var mealCaloriesToday: [MealCalories] {
+        let grouped = Dictionary(grouping: todayLogs) { log in
+            let mealType = log.mealType.trimmingCharacters(in: .whitespacesAndNewlines)
+            return mealType.isEmpty ? "Meal" : mealType
+        }
+
+        let orderedMealTypes = ["Breakfast", "Lunch", "Tea", "Dinner", "Late Night", "Snack"]
+
+        return grouped
+            .map { mealType, entries in
+                MealCalories(
+                    mealType: mealType,
+                    calories: entries.reduce(0) { $0 + $1.Calories },
+                    itemCount: entries.count
+                )
+            }
+            .sorted { lhs, rhs in
+                let lhsIndex = orderedMealTypes.firstIndex(of: lhs.mealType) ?? Int.max
+                let rhsIndex = orderedMealTypes.firstIndex(of: rhs.mealType) ?? Int.max
+                if lhsIndex != rhsIndex {
+                    return lhsIndex < rhsIndex
+                }
+                return lhs.mealType < rhs.mealType
+            }
+    }
+
+    private var weeklyNutritionPoints: [WeeklyNutritionPoint] {
+        let startOfToday = calendar.startOfDay(for: Date())
+        let logsByDay = Dictionary(grouping: logs) { log in
+            calendar.startOfDay(for: log.timestamp)
+        }
+
+        return (0..<7).flatMap { dayOffset in
+            let date = calendar.date(byAdding: .day, value: -(6 - dayOffset), to: startOfToday) ?? startOfToday
+            let dayLogs = logsByDay[date] ?? []
+
+            let calories = dayLogs.reduce(0) { $0 + $1.Calories }
+            let carbs = dayLogs.reduce(0) { $0 + $1.Carbohydrate }
+            let protein = dayLogs.reduce(0) { $0 + $1.Protein }
+            let fat = dayLogs.reduce(0) { $0 + $1.Fat }
+
+            return [
+                WeeklyNutritionPoint(date: date, nutrient: .calories, value: calories),
+                WeeklyNutritionPoint(date: date, nutrient: .carbs, value: carbs),
+                WeeklyNutritionPoint(date: date, nutrient: .protein, value: protein),
+                WeeklyNutritionPoint(date: date, nutrient: .fat, value: fat)
+            ]
+        }
+    }
     
     var body: some View {
         GeometryReader { geometry in
@@ -107,7 +187,16 @@ struct HomeView: View {
                     VStack(spacing: 0) {
                         TabView(selection: $currentPage) {
                             NavigationLink(destination: NutrientsDetailView()) {
-                                NutritionSlide(currentCal: 1590, targetCal: 2650)
+                                NutritionSlide(
+                                    currentCal: todayCalories,
+                                    targetCal: targetCalories,
+                                    currentCarbs: todayCarbs,
+                                    targetCarbs: targetCarbs,
+                                    currentProtein: todayProtein,
+                                    targetProtein: targetProtein,
+                                    currentFat: todayFat,
+                                    targetFat: targetFat
+                                )
                             }
                             .buttonStyle(PlainButtonStyle())
                             .tag(0)
@@ -130,6 +219,10 @@ struct HomeView: View {
                         }
                         .padding(.top, 10)
                     }
+
+                    // SECTION C: WEEKLY CHART
+                    WeeklyNutritionChartCard(points: weeklyNutritionPoints)
+
                 // SECTION C: ACTIVE CALORIES
                 HStack {
                     Image(systemName: "heart.fill")
@@ -178,9 +271,18 @@ struct HomeView: View {
                             
                     }
                     .padding(.horizontal)
-                    
-                    MealRow(mealName: "Breakfast", items: "Oatmeal with berries", calories: 485)
-                    MealRow(mealName: "Lunch", items: "Grilled chicken salad", calories: 620)
+
+                    if mealCaloriesToday.isEmpty {
+                        MealRow(mealName: "No meals logged", items: "Add a meal from the Add tab", calories: 0)
+                    } else {
+                        ForEach(mealCaloriesToday) { meal in
+                            MealRow(
+                                mealName: meal.mealType,
+                                items: "\(meal.itemCount) item\(meal.itemCount == 1 ? "" : "s")",
+                                calories: Int(meal.calories.rounded())
+                            )
+                        }
+                    }
                 }
                 .padding(.bottom, 20)
             }
@@ -249,10 +351,112 @@ struct MealRow: View {
     }
 }
 
+struct MealCalories: Identifiable {
+    let id = UUID()
+    let mealType: String
+    let calories: Double
+    let itemCount: Int
+}
+
+enum WeeklyNutrient: String, CaseIterable {
+    case calories = "Calories"
+    case carbs = "Carbs"
+    case protein = "Protein"
+    case fat = "Fat"
+
+    var color: Color {
+        switch self {
+        case .calories:
+            return .green
+        case .carbs:
+            return .blue
+        case .protein:
+            return .orange
+        case .fat:
+            return .pink
+        }
+    }
+}
+
+struct WeeklyNutritionPoint: Identifiable {
+    let id = UUID()
+    let date: Date
+    let nutrient: WeeklyNutrient
+    let value: Double
+}
+
+struct WeeklyNutritionChartCard: View {
+    let points: [WeeklyNutritionPoint]
+
+    private var yMax: Double {
+        let maxValue = points.map(\ .value).max() ?? 1
+        return max(maxValue * 1.2, 100)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Chart")
+                .font(.headline)
+
+            Chart(points) { point in
+                LineMark(
+                    x: .value("Date", point.date),
+                    y: .value(point.nutrient.rawValue, point.value)
+                )
+                .interpolationMethod(.catmullRom)
+                .foregroundStyle(by: .value("Nutrient", point.nutrient.rawValue))
+
+                PointMark(
+                    x: .value("Date", point.date),
+                    y: .value(point.nutrient.rawValue, point.value)
+                )
+                .foregroundStyle(by: .value("Nutrient", point.nutrient.rawValue))
+                .symbolSize(20)
+            }
+            .chartYScale(domain: 0...yMax)
+            .chartXAxis {
+                AxisMarks(values: .stride(by: .day)) { value in
+                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 2]))
+                        .foregroundStyle(.gray.opacity(0.2))
+                    AxisTick()
+                    AxisValueLabel {
+                        if let date = value.as(Date.self) {
+                            Text(date, format: .dateTime.weekday(.abbreviated))
+                                .font(.caption2)
+                        }
+                    }
+                }
+            }
+            .chartYAxis {
+                AxisMarks(position: .leading)
+            }
+            .chartLegend(position: .bottom, alignment: .leading, spacing: 12)
+            .chartForegroundStyleScale([
+                WeeklyNutrient.calories.rawValue: WeeklyNutrient.calories.color,
+                WeeklyNutrient.carbs.rawValue: WeeklyNutrient.carbs.color,
+                WeeklyNutrient.protein.rawValue: WeeklyNutrient.protein.color,
+                WeeklyNutrient.fat.rawValue: WeeklyNutrient.fat.color
+            ])
+            .frame(height: 220)
+        }
+        .padding()
+        .background(Color(uiColor: .secondarySystemGroupedBackground))
+        .cornerRadius(16)
+        .shadow(color: Color(uiColor: .label).opacity(0.05), radius: 5, x: 0, y: 2)
+        .padding(.horizontal)
+    }
+}
+
 // --- SLIDE 1: NUTRITION (Your Original Grid) ---
 struct NutritionSlide: View {
     let currentCal: Double
     let targetCal: Double
+    let currentCarbs: Double
+    let targetCarbs: Double
+    let currentProtein: Double
+    let targetProtein: Double
+    let currentFat: Double
+    let targetFat: Double
     @ScaledMetric(relativeTo: .body) private var scaledCircleSize: CGFloat = UIScreen.isSmallDevice ? 85 : 100
     @ScaledMetric(relativeTo: .body) private var circleLineWidth: CGFloat = UIScreen.isSmallDevice ? 7 : 8
     
@@ -357,9 +561,9 @@ struct NutritionSlide: View {
             
             // Bottom: Macros progress bars (horizontal layout)
             HStack(spacing: UIScreen.isSmallDevice ? 15 : 25) {
-                MacroBar(label: "CARBS", current: 198, target: 330, unit: "g", color: .green)
-                MacroBar(label: "PROTEIN", current: 79, target: 132, unit: "g", color: .green)
-                MacroBar(label: "FAT", current: 52, target: 80, unit: "g", color: .green)
+                MacroBar(label: "CARBS", current: currentCarbs, target: targetCarbs, unit: "g", color: .green)
+                MacroBar(label: "PROTEIN", current: currentProtein, target: targetProtein, unit: "g", color: .green)
+                MacroBar(label: "FAT", current: currentFat, target: targetFat, unit: "g", color: .green)
             }
             .padding(.horizontal, UIScreen.isSmallDevice ? 20 : 25)
             .padding(.bottom, UIScreen.isSmallDevice ? 10 : 12)

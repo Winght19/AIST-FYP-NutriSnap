@@ -1,37 +1,32 @@
 import SwiftUI
+import SwiftData
 
 struct NutrientsDetailView: View {
     @Environment(\.dismiss) var dismiss
+    @Query private var logs: [FoodLog]
     @State private var selectedDate = Date()
     @State private var showDatePicker = false
-    
-    let nutrients: [Nutrient] = [
-        Nutrient(id: 1008, name: "Calories", unit: "kcal", target: 2000, current: 1850),
-        Nutrient(id: 1003, name: "Protein", unit: "g", target: 56, current: 45),
-        Nutrient(id: 1005, name: "Carbohydrate", unit: "g", target: 130, current: 110),
-        Nutrient(id: 1079, name: "Fiber", unit: "g", target: 38, current: 15),
-        Nutrient(id: 1087, name: "Calcium", unit: "mg", target: 1000, current: 650),
-        Nutrient(id: 1089, name: "Iron", unit: "mg", target: 8, current: 6),
-        Nutrient(id: 1092, name: "Potassium", unit: "mg", target: 3400, current: 2100),
-        Nutrient(id: 1093, name: "Sodium", unit: "mg", target: 2300, current: 2450),
-        Nutrient(id: 1095, name: "Zinc", unit: "mg", target: 11, current: 8),
-        Nutrient(id: 1106, name: "Vitamin A", unit: "μg", target: 900, current: 720),
-        Nutrient(id: 1114, name: "Vitamin D", unit: "μg", target: 15, current: 5),
-        Nutrient(id: 1162, name: "Vitamin C", unit: "mg", target: 90, current: 45),
-        Nutrient(id: 1165, name: "Vitamin B1", unit: "mg", target: 1.2, current: 1.0),
-        Nutrient(id: 1166, name: "Vitamin B2", unit: "mg", target: 1.3, current: 1.1),
-        Nutrient(id: 1167, name: "Vitamin B3", unit: "mg", target: 16, current: 14),
-        Nutrient(id: 1170, name: "Vitamin B5", unit: "mg", target: 5, current: 3.5),
-        Nutrient(id: 1175, name: "Vitamin B6", unit: "mg", target: 1.3, current: 1.2),
-        Nutrient(id: 1177, name: "Vitamin B9", unit: "μg", target: 400, current: 320),
-        Nutrient(id: 1178, name: "Vitamin B12", unit: "μg", target: 2.4, current: 1.8),
-        Nutrient(id: 1253, name: "Cholesterol", unit: "mg", target: 300, current: 210),
-        Nutrient(id: 1257, name: "Trans Fat", unit: "g", target: 0, current: 0.5),
-        Nutrient(id: 1258, name: "Saturated Fat", unit: "g", target: 20, current: 25),
-        Nutrient(id: 1292, name: "Monounsaturated Fat", unit: "g", target: 30, current: 18),
-        Nutrient(id: 1293, name: "Polyunsaturated Fat", unit: "g", target: 20, current: 12),
-        Nutrient(id: 2000, name: "Sugar", unit: "g", target: 36, current: 42)
-    ]
+
+    private var calendar: Calendar {
+        Calendar.current
+    }
+
+    private var logsForSelectedDate: [FoodLog] {
+        logs.filter { calendar.isDate($0.timestamp, inSameDayAs: selectedDate) }
+    }
+
+    private func sum(_ keyPath: KeyPath<FoodLog, Double>) -> Double {
+        logsForSelectedDate.reduce(0) { $0 + $1[keyPath: keyPath] }
+    }
+
+    private var nutrients: [Nutrient] {
+        [
+            Nutrient(id: 1008, name: "Calories", unit: "kcal", target: 2000, current: sum(\.Calories)),
+            Nutrient(id: 1003, name: "Protein", unit: "g", target: 56, current: sum(\.Protein)),
+            Nutrient(id: 1005, name: "Carbohydrate", unit: "g", target: 130, current: sum(\.Carbohydrate)),
+            Nutrient(id: 1004, name: "Fat", unit: "g", target: 80, current: sum(\.Fat))
+        ]
+    }
     
     var body: some View {
         VStack(spacing: 0) {
