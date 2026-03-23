@@ -1,97 +1,89 @@
-import SwiftUI
+import UIKit
 import GoogleSignIn
 import Observation
 
-/// Manages authentication state and Google Sign-In flow
+/// Thin wrapper around the Google Sign-In SDK.
+/// Owns the SDK interaction only — routing decisions live in AppStateManager.
 @Observable
 class AuthenticationManager {
-    var isSignedIn: Bool = false
     var isLoading: Bool = false
-    var errorMessage: String?
-    var hasCompletedOnboarding: Bool = false
-    
-    // User info from Google
+
+    // Google user info — populated after a successful sign-in.
     var userName: String = ""
     var userEmail: String = ""
+    var googleSub: String = ""
     var userProfileImageURL: URL?
-    
-    init() {
-        // Restore onboarding state
-        hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
-        // Check if user was previously signed in
-        restorePreviousSignIn()
-    }
-    
-    // MARK: - Restore Previous Sign-In
-    
-    /// Attempts to restore a previous Google Sign-In session
-    func restorePreviousSignIn() {
-        GIDSignIn.sharedInstance.restorePreviousSignIn { [weak self] user, error in
-            DispatchQueue.main.async {
-                if let user = user, error == nil {
-                    self?.updateUserInfo(from: user)
-                    self?.isSignedIn = true
-                } else {
-                    self?.isSignedIn = false
-                }
-            }
-        }
-    }
-    
-    // MARK: - Sign In with Google
-    
-    /// Initiates the Google Sign-In flow
-    func signInWithGoogle() {
+
+    // MARK: - Async Google Sign-In
+
+    /// Presents the Google Sign-In sheet and returns the ID token on success.
+    /// Throws AuthError.canceled if the user dismisses the sheet.
+    func getGoogleIDToken() async throws -> String {
         guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
               let rootViewController = windowScene.windows.first?.rootViewController else {
-            errorMessage = "Unable to find root view controller."
-            return
+            throw AuthError.noViewController
         }
-        
-        isLoading = true
-        errorMessage = nil
-        
-        GIDSignIn.sharedInstance.signIn(withPresenting: rootViewController) { [weak self] result, error in
-            DispatchQueue.main.async {
-                self?.isLoading = false
-                
-                if let error = error {
-                    // Don't show error for user cancellation
-                    if (error as NSError).code != GIDSignInError.canceled.rawValue {
-                        self?.errorMessage = error.localizedDescription
+
+        return try await withCheckedThrowingContinuation { continuation in
+            isLoading = true
+            GIDSignIn.sharedInstance.signIn(withPresenting: rootViewController) { [weak self] result, error in
+                DispatchQueue.main.async {
+                    self?.isLoading = false
+
+                    if let error = error {
+                        if (error as NSError).code == GIDSignInError.canceled.rawValue {
+                            continuation.resume(throwing: AuthError.canceled)
+                        } else {
+                            continuation.resume(throwing: error)
+                        }
+                        return
                     }
-                    return
+
+                    guard let user = result?.user,
+                          let idToken = user.idToken?.tokenString else {
+                        continuation.resume(throwing: AuthError.noIDToken)
+                        return
+                    }
+
+                    self?.updateUserInfo(from: user)
+                    continuation.resume(returning: idToken)
                 }
-                
-                guard let user = result?.user else {
-                    self?.errorMessage = "Failed to get user information."
-                    return
-                }
-                
-                self?.updateUserInfo(from: user)
-                self?.isSignedIn = true
             }
         }
     }
-    
+
     // MARK: - Sign Out
-    
-    /// Signs the user out
+
     func signOut() {
         GIDSignIn.sharedInstance.signOut()
-        isSignedIn = false
-        hasCompletedOnboarding = false
         userName = ""
         userEmail = ""
+        googleSub = ""
         userProfileImageURL = nil
-        UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
     }
-    
+
     // MARK: - Private Helpers
-    
+
     private func updateUserInfo(from user: GIDGoogleUser) {
-        userName = user.profile?.name ?? "User"
+        userName = user.profile?.name ?? ""
         userEmail = user.profile?.email ?? ""
+        googleSub = user.userID ?? ""
         userProfileImageURL = user.profile?.imageURL(withDimension: 200)
+    }
+
+    // MARK: - Errors
+
+    enum AuthError: LocalizedError {
+        case noViewController
+        case canceled
+        case noIDToken
+
+        var errorDescription: String? {
+            switch self {
+            case .noViewController: return "Could not find a view controller to present sign-in."
+            case .canceled: return "Sign-in was cancelled."
+            case .noIDToken: return "Google did not return an ID token."
+            }
+        }
     }
 }

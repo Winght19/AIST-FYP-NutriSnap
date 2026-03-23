@@ -4,17 +4,19 @@ import GoogleSignIn
 
 @main
 struct NutriSnapApp: App {
-    @State private var authManager = AuthenticationManager()
-    
-    // 1. Define the container for your FoodLog model
+    // @State is the correct wrapper for @Observable objects owned by a Scene.
+    @State private var appStateManager = AppStateManager()
+
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            FoodLog.self, // <--- Make sure FoodLog is listed here!
+            User.self,
+            Meal.self,
+            Food.self,
+            FoodLog.self,
         ])
-        let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
-
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
         do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            return try ModelContainer(for: schema, configurations: [config])
         } catch {
             fatalError("Could not create ModelContainer: \(error)")
         }
@@ -22,23 +24,12 @@ struct NutriSnapApp: App {
 
     var body: some Scene {
         WindowGroup {
-            Group {
-                if authManager.isSignedIn && authManager.hasCompletedOnboarding {
-                    DashboardView()
-                } else if authManager.isSignedIn {
-                    OnboardingView()
-                } else {
-                    LandingView()
+            RootView()
+                .environment(appStateManager)
+                .onOpenURL { url in
+                    GIDSignIn.sharedInstance.handle(url)
                 }
-            }
-            .environment(authManager)
-            .onOpenURL { url in
-                // Handle the Google Sign-In redirect URL
-                GIDSignIn.sharedInstance.handle(url)
-            }
         }
-        // 2. Inject it into the window
         .modelContainer(sharedModelContainer)
     }
 }
-

@@ -3,19 +3,24 @@ import Foundation
 
 @Model
 class Meal {
-    @Attribute(.unique) var id: UUID
+    // MARK: - Cloud Sync Metadata
+    var remoteID: String?
+    var needsSync: Bool
+    var lastModifiedAt: Date
+
+    // MARK: - Core Fields
     var name: String
-    var mealType: String // "breakfast", "lunch", "dinner", "snack"
+    var mealType: String       // "breakfast", "lunch", "dinner", "snack"
     var timestamp: Date
     var imageData: Data?
-    
-    // Nutrition totals
+
+    // MARK: - Macro Totals
     var calories: Double
     var protein: Double
     var carbs: Double
     var fat: Double
 
-     // Detailed nutrients
+    // MARK: - Detailed Nutrients
     var fiber: Double?
     var calcium: Double?
     var iron: Double?
@@ -39,14 +44,14 @@ class Meal {
     var polyunsaturatedFat: Double?
     var sugar: Double?
 
-
-    
-    // Relationship
+    // MARK: - Relationships
     var user: User?
-    @Relationship(deleteRule: .cascade) var foods: [Food]?
-    
+    @Relationship(deleteRule: .cascade, inverse: \Food.meal) var foods: [Food]?
+
     init(name: String, mealType: String, timestamp: Date = Date()) {
-        self.id = UUID()
+        self.remoteID = nil
+        self.needsSync = true
+        self.lastModifiedAt = Date()
         self.name = name
         self.mealType = mealType
         self.timestamp = timestamp
@@ -56,4 +61,3 @@ class Meal {
         self.fat = 0
     }
 }
-   
