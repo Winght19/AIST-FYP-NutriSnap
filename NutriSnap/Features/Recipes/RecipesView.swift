@@ -208,7 +208,7 @@ struct RecipeCard: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            // Cuisine Badge and Heart
+            // Cuisine Badge
             HStack(alignment: .top) {
                 Text(cuisine.uppercased())
                     .font(.caption2)
@@ -218,11 +218,6 @@ struct RecipeCard: View {
                     .background(Color.orange.opacity(0.2))
                     .foregroundColor(Color(red: 0.8, green: 0.4, blue: 0.2)) // Match reference rusty orange
                     .cornerRadius(6)
-                
-                Spacer()
-                
-                Image(systemName: "heart.fill")
-                    .foregroundColor(Color(red: 0.6, green: 0.7, blue: 0.6)) // Muted green heart
             }
             
             // Recipe Title
