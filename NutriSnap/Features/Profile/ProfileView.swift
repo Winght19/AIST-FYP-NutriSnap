@@ -132,7 +132,7 @@ struct ProfileView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {}) {
+                    NavigationLink(destination: SettingsView()) {
                         Image(systemName: "gearshape")
                             .font(.title3)
                             .foregroundColor(.primary)

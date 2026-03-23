@@ -40,31 +40,62 @@ struct RecipesView: View {
                         ProgressView()
                             .padding(.trailing, 8)
                     }
-                    Text("\(viewModel.recipes.count) results")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
+                    if viewModel.totalCount > 0 {
+                        Text("\(viewModel.recipes.count) of \(viewModel.totalCount) results")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                    } else if !viewModel.isLoading {
+                        Text("\(viewModel.recipes.count) results")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                    }
                     Spacer()
                 }
                 .padding(.horizontal)
                 .padding(.bottom, 8)
                 
-                // Recipe Grid
+                // Recipe List
                 ScrollView {
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 16) {
+                    LazyVStack(spacing: 12) {
                         ForEach(viewModel.recipes) { recipe in
+                            // Find 'Calories' nutrient
+                            let caloriesNutrient = recipe.recipeNutrients?.first(where: {
+                                $0.nutrient.name.lowercased() == "calories"
+                            })
+                            let caloriesString = caloriesNutrient != nil ? String(format: "%.0f kcal", caloriesNutrient!.amount) : "N/A"
+                            
                             NavigationLink(destination: RecipeDetailView(recipeId: recipe.id)) {
                                 RecipeCard(
                                     title: recipe.title,
                                     cuisine: recipe.cuisine?.name ?? "Unknown",
-                                    difficulty: recipe.difficulty?.name ?? "Unknown"
+                                    difficulty: recipe.difficulty?.name ?? "Unknown",
+                                    calories: caloriesString
                                 )
                             }
                             .buttonStyle(PlainButtonStyle())
+                            .onAppear {
+                                // Trigger load more when the last item appears
+                                if recipe.id == viewModel.recipes.last?.id {
+                                    Task { await viewModel.loadMoreRecipes() }
+                                }
+                            }
                         }
                     }
                     .padding(.horizontal)
-                    .padding(.bottom, 100)
+                    
+                    // Skeleton cards below the recipe list while loading
+                    if viewModel.isLoading || viewModel.isLoadingMore {
+                        LazyVStack(spacing: 12) {
+                            ForEach(0..<3, id: \.self) { _ in
+                                RecipeSkeletonCard()
+                            }
+                        }
+                        .padding(.horizontal)
+                    }
+                    
+                    Spacer().frame(height: 100)
                 }
+                .background(Color(red: 0.95, green: 0.98, blue: 0.93)) // Light greenish-yellow background
             }
             .navigationTitle("Recipes")
             .navigationBarTitleDisplayMode(.inline)
@@ -88,41 +119,149 @@ struct RecipesView: View {
     }
 }
 
+// MARK: - Skeleton Card with Shimmer
+
+struct RecipeSkeletonCard: View {
+    @State private var isAnimating = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // Cuisine badge placeholder
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color(.systemGray5))
+                .frame(width: 80, height: 22)
+            
+            // Title placeholder
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Color(.systemGray5))
+                .frame(height: 18)
+            
+            RoundedRectangle(cornerRadius: 4)
+                .fill(Color(.systemGray5))
+                .frame(width: 200, height: 18)
+            
+            // Difficulty & Calories placeholder
+            HStack(spacing: 40) {
+                VStack(alignment: .leading, spacing: 4) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color(.systemGray5))
+                        .frame(width: 70, height: 10)
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color(.systemGray5))
+                        .frame(width: 60, height: 14)
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color(.systemGray5))
+                        .frame(width: 60, height: 10)
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color(.systemGray5))
+                        .frame(width: 70, height: 14)
+                }
+            }
+        }
+        .padding(16)
+        .background(Color.white)
+        .cornerRadius(16)
+        .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+        .overlay(
+            shimmerOverlay
+                .cornerRadius(16)
+        )
+        .onAppear { isAnimating = true }
+    }
+    
+    private var shimmerOverlay: some View {
+        GeometryReader { geo in
+            let width = geo.size.width
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            .clear,
+                            Color.white.opacity(0.4),
+                            .clear
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(width: width * 0.6)
+                .offset(x: isAnimating ? width : -width * 0.6)
+                .animation(
+                    .easeInOut(duration: 1.2).repeatForever(autoreverses: false),
+                    value: isAnimating
+                )
+        }
+        .clipped()
+    }
+}
+
+// MARK: - Recipe Card
+
 struct RecipeCard: View {
     let title: String
     let cuisine: String
     let difficulty: String
+    let calories: String // New property
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Recipe Title
-            Text(title)
-                .font(.subheadline)
-                .fontWeight(.semibold)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(height: 44, alignment: .topLeading)
-            
-            // Cuisine & Difficulty
-            HStack {
-                Text(cuisine.capitalized)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+        VStack(alignment: .leading, spacing: 10) {
+            // Cuisine Badge and Heart
+            HStack(alignment: .top) {
+                Text(cuisine.uppercased())
+                    .font(.caption2)
+                    .fontWeight(.bold)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.orange.opacity(0.2))
+                    .foregroundColor(Color(red: 0.8, green: 0.4, blue: 0.2)) // Match reference rusty orange
+                    .cornerRadius(6)
                 
                 Spacer()
                 
-                Text(difficulty)
-                    .font(.caption2)
-                    .fontWeight(.bold)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.green.opacity(0.2))
-                    .foregroundColor(.green)
-                    .cornerRadius(4)
+                Image(systemName: "heart.fill")
+                    .foregroundColor(Color(red: 0.6, green: 0.7, blue: 0.6)) // Muted green heart
+            }
+            
+            // Recipe Title
+            Text(title)
+                .font(.body)
+                .fontWeight(.bold)
+                .foregroundColor(.black)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.leading)
+            
+            // Difficulty and Calories
+            HStack(spacing: 40) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("DIFFICULTY")
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .foregroundColor(Color(red: 0.7, green: 0.4, blue: 0.2)) // Rust color for label
+                    Text(difficulty.capitalized)
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.black)
+                }
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("CALORIES")
+                        .font(.caption2)
+                        .fontWeight(.bold)
+                        .foregroundColor(Color(red: 0.7, green: 0.4, blue: 0.2)) // Rust color for label
+                    Text(calories)
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.black)
+                }
             }
         }
-        .padding(12)
-        .background(Color(uiColor: .secondarySystemGroupedBackground))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(Color.white)
         .cornerRadius(16)
         .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
     }

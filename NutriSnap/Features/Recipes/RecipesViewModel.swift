@@ -18,7 +18,14 @@ final class RecipesViewModel {
     
     var recipes: [SupabaseRecipe] = []
     var isLoading: Bool = false
+    var isLoadingMore: Bool = false
     var errorMessage: String? = nil
+    
+    // Pagination
+    var totalCount: Int = 0
+    private var currentOffset: Int = 0
+    private let pageSize: Int = 30
+    var hasMorePages: Bool { currentOffset < totalCount }
     
     // Static lists for Dropdowns
     let cuisines = ["Select", "Chinese", "Japanese", "Korean", "Southern US", "Italian", "Mexican", "French", "Indian", "British", "Russian", "Greek", "Cajun Creole", "Filipino", "Irish", "Jamaican", "Thai", "Spanish", "Moroccan", "Brazilian", "Vietnamese"]
@@ -64,76 +71,84 @@ final class RecipesViewModel {
         selectedDifficulty = nil
     }
     
+    /// Builds the query endpoint string for the current filters and given offset/limit.
+    private func buildEndpoint(offset: Int, limit: Int) -> String {
+        var urlComponents = URLComponents()
+        urlComponents.path = "/recipes"
+        urlComponents.queryItems = []
+        
+        var selectQuery = "id,title,recipeNutrients:recipe_nutrients(amount,nutrient:nutrient_definitions(name,unit))"
+        
+        // Apply text search
+        if !searchText.filter({ !$0.isWhitespace }).isEmpty {
+            urlComponents.queryItems?.append(URLQueryItem(name: "title", value: "ilike.%\(searchText)%"))
+        }
+        
+        // Build complex joins for filters
+        
+        // 1. Difficulty
+        if let diff = selectedDifficulty {
+            selectQuery += ",difficulty:difficulty_levels!inner(name)"
+            urlComponents.queryItems?.append(URLQueryItem(name: "difficulty.name", value: "eq.\(diff)"))
+        } else {
+            selectQuery += ",difficulty:difficulty_levels(name)"
+        }
+        
+        // 2. Cuisine
+        if selectedCuisine != "Select", let dbName = cuisineMap[selectedCuisine] {
+            selectQuery += ",cuisine:cuisines!inner(name)"
+            urlComponents.queryItems?.append(URLQueryItem(name: "cuisine.name", value: "eq.\(dbName)"))
+        } else {
+            selectQuery += ",cuisine:cuisines(name)"
+        }
+        
+        // 3. Diet
+        if selectedDiet != "Select", let dbName = dietMap[selectedDiet] {
+            selectQuery += ",recipe_dietary_tags!inner(tag:dietary_tags!inner(name))"
+            urlComponents.queryItems?.append(URLQueryItem(name: "recipe_dietary_tags.dietary_tags.name", value: "eq.\(dbName)"))
+        }
+        
+        // 4. Allergen
+        if selectedAllergen != "Select", let dbName = allergenMap[selectedAllergen] {
+            selectQuery += ",recipe_allergens!inner(allergen:allergens!inner(name))"
+            urlComponents.queryItems?.append(URLQueryItem(name: "recipe_allergens.allergens.name", value: "eq.\(dbName)"))
+        }
+        
+        // 5. Main Ingredient
+        if selectedIngredient != "Select" {
+            selectQuery += ",raw_ingredients!inner(ingredient_text)"
+            urlComponents.queryItems?.append(URLQueryItem(name: "raw_ingredients.ingredient_text", value: "ilike.%\(selectedIngredient)%"))
+        }
+        
+        // Update the select query item
+        urlComponents.queryItems?.removeAll(where: { $0.name == "select" })
+        urlComponents.queryItems?.insert(URLQueryItem(name: "select", value: selectQuery), at: 0)
+        
+        // Pagination
+        urlComponents.queryItems?.append(URLQueryItem(name: "offset", value: "\(offset)"))
+        urlComponents.queryItems?.append(URLQueryItem(name: "limit", value: "\(limit)"))
+        
+        let query = urlComponents.query ?? ""
+        return "/recipes?\(query)"
+    }
+    
+    /// Initial fetch — resets pagination and loads the first page.
     func fetchRecipes() async {
         isLoading = true
         errorMessage = nil
+        currentOffset = 0
+        totalCount = 0
+        
+        let endpoint = buildEndpoint(offset: 0, limit: pageSize)
+        print("Recipes Query Endpoint: \(endpoint)")
         
         do {
-            var urlComponents = URLComponents()
-            urlComponents.path = "/recipes"
-            urlComponents.queryItems = []
-            
-            var selectQuery = "id,title"
-            
-            // Apply text search
-            if !searchText.filter({ !$0.isWhitespace }).isEmpty {
-                urlComponents.queryItems?.append(URLQueryItem(name: "title", value: "ilike.%\(searchText)%"))
-            }
-            
-            // Build complex joins for filters
-            
-            // 1. Difficulty
-            if let diff = selectedDifficulty {
-                selectQuery += ",difficulty:difficulty_levels!inner(name)"
-                urlComponents.queryItems?.append(URLQueryItem(name: "difficulty.name", value: "eq.\(diff)"))
-            } else {
-                selectQuery += ",difficulty:difficulty_levels(name)"
-            }
-            
-            // 2. Cuisine
-            if selectedCuisine != "Select", let dbName = cuisineMap[selectedCuisine] {
-                selectQuery += ",cuisine:cuisines!inner(name)"
-                urlComponents.queryItems?.append(URLQueryItem(name: "cuisine.name", value: "eq.\(dbName)"))
-            } else {
-                selectQuery += ",cuisine:cuisines(name)"
-            }
-            
-            // 3. Diet
-            if selectedDiet != "Select", let dbName = dietMap[selectedDiet] {
-                selectQuery += ",recipe_dietary_tags!inner(tag:dietary_tags!inner(name))"
-                urlComponents.queryItems?.append(URLQueryItem(name: "recipe_dietary_tags.dietary_tags.name", value: "eq.\(dbName)"))
-            }
-            
-            // 4. Allergen 
-            if selectedAllergen != "Select", let dbName = allergenMap[selectedAllergen] {
-                selectQuery += ",recipe_allergens!inner(allergen:allergens!inner(name))"
-                urlComponents.queryItems?.append(URLQueryItem(name: "recipe_allergens.allergens.name", value: "eq.\(dbName)"))
-            }
-
-            // 5. Main Ingredient
-            if selectedIngredient != "Select" {
-                selectQuery += ",raw_ingredients!inner(ingredient_text)"
-                urlComponents.queryItems?.append(URLQueryItem(name: "raw_ingredients.ingredient_text", value: "ilike.%\(selectedIngredient)%"))
-            }
-            
-            // Update the select query item
-            urlComponents.queryItems?.removeAll(where: { $0.name == "select" })
-            urlComponents.queryItems?.insert(URLQueryItem(name: "select", value: selectQuery), at: 0)
-            
-            urlComponents.queryItems?.append(URLQueryItem(name: "limit", value: "30"))
-            
-            guard let query = urlComponents.query else {
-                throw URLError(.badURL)
-            }
-            
-            let endpoint = "/recipes?\(query)"
-            print("Recipes Query Endpoint: \(endpoint)")
-            
-            // Execute request
-            let fetchedRecipes: [SupabaseRecipe] = try await apiClient.restGet(endpoint)
+            let (fetchedRecipes, count): ([SupabaseRecipe], Int?) = try await apiClient.restGetWithCount(endpoint)
             
             await MainActor.run {
                 self.recipes = fetchedRecipes
+                self.totalCount = count ?? fetchedRecipes.count
+                self.currentOffset = fetchedRecipes.count
                 self.isLoading = false
             }
         } catch {
@@ -141,6 +156,32 @@ final class RecipesViewModel {
             await MainActor.run {
                 self.errorMessage = error.localizedDescription
                 self.isLoading = false
+            }
+        }
+    }
+    
+    /// Loads the next page and appends results.
+    func loadMoreRecipes() async {
+        guard hasMorePages, !isLoading, !isLoadingMore else { return }
+        isLoadingMore = true
+        
+        let endpoint = buildEndpoint(offset: currentOffset, limit: pageSize)
+        print("Load More Endpoint: \(endpoint)")
+        
+        do {
+            let (fetchedRecipes, count): ([SupabaseRecipe], Int?) = try await apiClient.restGetWithCount(endpoint)
+            
+            await MainActor.run {
+                self.recipes.append(contentsOf: fetchedRecipes)
+                if let count { self.totalCount = count }
+                self.currentOffset += fetchedRecipes.count
+                self.isLoadingMore = false
+            }
+        } catch {
+            print("Load More Recipes Error: \(error.localizedDescription)")
+            await MainActor.run {
+                self.errorMessage = error.localizedDescription
+                self.isLoadingMore = false
             }
         }
     }

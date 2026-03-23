@@ -109,6 +109,60 @@ final class APIClient {
         try await execute(endpoint: endpoint, method: "GET", bodyData: nil, token: token, isREST: true)
     }
 
+    /// Fetches data with an exact count via Supabase's `Prefer: count=exact` header.
+    /// Returns the decoded response and the total count parsed from the `Content-Range` header.
+    func restGetWithCount<T: Decodable>(_ endpoint: String, token: String? = nil) async throws -> (T, Int?) {
+        let basePath = restURL
+        guard let url = URL(string: basePath + endpoint) else {
+            throw APIError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("count=exact", forHTTPHeaderField: "Prefer")
+
+        if let token {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        } else {
+            request.setValue("Bearer \(supabaseAnonKey)", forHTTPHeaderField: "Authorization")
+        }
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let http = response as? HTTPURLResponse else {
+            throw APIError.networkError(URLError(.badServerResponse))
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            if let body = try? JSONDecoder().decode([String: String].self, from: data),
+               let message = body["error"] {
+                throw APIError.serverError("HTTP \(http.statusCode): \(message)")
+            }
+            throw APIError.httpError(http.statusCode)
+        }
+
+        // Parse total count from Content-Range header (e.g. "0-29/542")
+        var totalCount: Int? = nil
+        if let rangeHeader = http.value(forHTTPHeaderField: "Content-Range"),
+           let slashIndex = rangeHeader.lastIndex(of: "/") {
+            let countStr = String(rangeHeader[rangeHeader.index(after: slashIndex)...])
+            totalCount = Int(countStr)
+        }
+
+        do {
+            let decoded = try decoder.decode(T.self, from: data)
+            return (decoded, totalCount)
+        } catch {
+            if let raw = String(data: data, encoding: .utf8) {
+                print("⚠️ DECODE FAILED for \(T.self)")
+                print("⚠️ Raw JSON: \(raw.prefix(500))")
+                print("⚠️ Error: \(error)")
+            }
+            throw APIError.decodingError(error)
+        }
+    }
+
     // MARK: - Private Core
 
     private func execute<T: Decodable>(
