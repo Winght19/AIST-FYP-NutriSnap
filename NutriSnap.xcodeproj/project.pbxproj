@@ -443,6 +443,8 @@
 				INFOPLIST_FILE = NutriSnap/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = NutriSnap;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
+				INFOPLIST_KEY_NSCameraUsageDescription = "\"We need camera access to scan and analyze your food.\"";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "\"We need gallery access so you can import food photos.\"";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -484,6 +486,8 @@
 				INFOPLIST_FILE = NutriSnap/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = NutriSnap;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
+				INFOPLIST_KEY_NSCameraUsageDescription = "\"We need camera access to scan and analyze your food.\"";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "\"We need gallery access so you can import food photos.\"";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

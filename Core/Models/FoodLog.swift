@@ -1,3 +1,8 @@
+//
+//  FoodLog.swift
+//  NutriSnap
+
+
 import Foundation
 import SwiftData
 
@@ -11,12 +16,17 @@ final class FoodLog {
     // MARK: - Core Fields
     var timestamp: Date
     var foodName: String
+    var mealType: String = "Meal"
+    var mass: Double = 0
+    
+    // For syncing to backend later
     var imagePath: String?
 
     // MARK: - Nutrients
     var Calories: Double
     var Protein: Double
     var Carbohydrate: Double
+    var Fat: Double
     var Fiber: Double
     var Calcium: Double
     var Iron: Double
@@ -39,25 +49,43 @@ final class FoodLog {
     var MonoUnsaturatedFat: Double
     var PolyUnsaturatedFat: Double
     var Sugar: Double
-
-    // MARK: - Relationship
+    
+    // The Initializer (This is what you were missing!)
+// MARK: - Relationship
     var user: User?
 
+    // The Initializer (This is what you were missing!)
     init(
         name: String,
         calories: Double,
         protein: Double = 0,
         carbs: Double = 0,
-        fat: Double = 0
+        fat: Double = 0,
+        imagePath: String? = nil,
+        timestamp: Date = Date(),
+        mealType: String = "Meal",
+        mass: Double = 0
     ) {
+        // IDs and Syncing
+        self.id = UUID()
         self.remoteID = nil
         self.needsSync = true
         self.lastModifiedAt = Date()
-        self.timestamp = Date()
+        
+        // Core Properties
+        self.timestamp = timestamp
         self.foodName = name
+        self.mealType = mealType
+        self.mass = mass
+        self.imagePath = imagePath
+        
+        // Macros
         self.Calories = calories
         self.Protein = protein
         self.Carbohydrate = carbs
+        self.Fat = fat
+        
+        // Default everything else to 0 so we don't have a giant list every time
         self.Fiber = 0
         self.Calcium = 0
         self.Iron = 0

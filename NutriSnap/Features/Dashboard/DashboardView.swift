@@ -4,7 +4,8 @@ import SwiftData
 // MARK: - Screen Size Helper
 extension UIScreen {
     static var isSmallDevice: Bool {
-        return main.bounds.height <= 844 // iPhone 14, 13, 12, 11 Pro and smaller
+        let height = (UIApplication.shared.connectedScenes.first as? UIWindowScene)?.screen.bounds.height ?? 852
+        return height <= 844 // iPhone 14, 13, 12, 11 Pro and smaller
     }
 }
 
@@ -14,6 +15,8 @@ struct DashboardView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTab = 0
+    @State private var showCameraSheet = false
+    
 
     init() {
         let appearance = UITabBarAppearance()
@@ -49,13 +52,15 @@ struct DashboardView: View {
             }
             .tag(0)
             
-            LogsView()
-                .tabItem {
-                    Label("Logs", systemImage: "fork.knife")
-                }
-                .tag(1)
+            NavigationStack {
+                LogsView()
+            }
+            .tabItem {
+                Label("Logs", systemImage: "fork.knife")
+            }
+            .tag(1)
             
-            Text("Add Button Placeholder") // We will make this a custom button later
+            Color.clear
                 .tabItem {
                     Label("Add", systemImage: "plus.circle.fill")
                 }
@@ -73,7 +78,16 @@ struct DashboardView: View {
                 }
                 .tag(4)
         }
-        .tint(Color.red)
+        .tint(Color.red) // Matches your "Add" button color
+        .onChange(of: selectedTab) { oldValue, newValue in
+            if newValue == 2 {
+                showCameraSheet = true
+                selectedTab = oldValue
+            }
+        }
+        .fullScreenCover(isPresented: $showCameraSheet) {
+            CameraView()
+        }
         .onChange(of: scenePhase) { _, newPhase in
             guard newPhase == .active else { return }
             Task {
