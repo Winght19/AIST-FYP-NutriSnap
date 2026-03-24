@@ -104,6 +104,21 @@ struct HomeView: View {
     @State private var currentPage = 0 // For tracking the current slide in the carousel
     @Binding var selectedTab: Int
     
+    // MARK: - Computed Properties for Today's Stats
+    private var todayLogs: [FoodLog] {
+        logs.filter { Calendar.current.isDateInToday($0.timestamp) }
+    }
+    
+    private var totalCalories: Double { todayLogs.reduce(0) { $0 + $1.Calories } }
+    private var totalCarbs: Double { todayLogs.reduce(0) { $0 + $1.Carbohydrate } }
+    private var totalProtein: Double { todayLogs.reduce(0) { $0 + $1.Protein } }
+    private var totalFat: Double { todayLogs.reduce(0) { $0 + $1.Fat } }
+
+    private var targetCalories: Double { Double(appStateManager.currentUser?.dailyCalorieGoal ?? 2000) }
+    private var targetCarbs: Double { Double(appStateManager.currentUser?.carbsGoal ?? 250) }
+    private var targetProtein: Double { Double(appStateManager.currentUser?.proteinGoal ?? 60) }
+    private var targetFat: Double { Double(appStateManager.currentUser?.fatGoal ?? 70) }
+    
     var body: some View {
         GeometryReader { geometry in
             ScrollView {
@@ -117,7 +132,16 @@ struct HomeView: View {
                     VStack(spacing: 0) {
                         TabView(selection: $currentPage) {
                             NavigationLink(destination: NutrientsDetailView()) {
-                                NutritionSlide(currentCal: 1590, targetCal: 2650)
+                                NutritionSlide(
+                                    currentCal: totalCalories,
+                                    targetCal: targetCalories,
+                                    currentCarbs: totalCarbs,
+                                    targetCarbs: targetCarbs,
+                                    currentProtein: totalProtein,
+                                    targetProtein: targetProtein,
+                                    currentFat: totalFat,
+                                    targetFat: targetFat
+                                )
                             }
                             .buttonStyle(PlainButtonStyle())
                             .tag(0)
@@ -189,8 +213,19 @@ struct HomeView: View {
                     }
                     .padding(.horizontal)
                     
-                    MealRow(mealName: "Breakfast", items: "Oatmeal with berries", calories: 485)
-                    MealRow(mealName: "Lunch", items: "Grilled chicken salad", calories: 620)
+                    if todayLogs.isEmpty {
+                        Text("No meals logged today yet.")
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal)
+                    } else {
+                        ForEach(todayLogs) { log in
+                            MealRow(
+                                mealName: log.mealType, // E.g., "Breakfast"
+                                items: log.foodName,    // E.g., "Oatmeal"
+                                calories: Int(log.Calories)
+                            )
+                        }
+                    }
                 }
                 .padding(.bottom, 20)
             }
@@ -263,6 +298,13 @@ struct MealRow: View {
 struct NutritionSlide: View {
     let currentCal: Double
     let targetCal: Double
+    let currentCarbs: Double
+    let targetCarbs: Double
+    let currentProtein: Double
+    let targetProtein: Double
+    let currentFat: Double
+    let targetFat: Double
+    
     @ScaledMetric(relativeTo: .body) private var scaledCircleSize: CGFloat = UIScreen.isSmallDevice ? 85 : 100
     @ScaledMetric(relativeTo: .body) private var circleLineWidth: CGFloat = UIScreen.isSmallDevice ? 7 : 8
     
@@ -367,9 +409,9 @@ struct NutritionSlide: View {
             
             // Bottom: Macros progress bars (horizontal layout)
             HStack(spacing: UIScreen.isSmallDevice ? 15 : 25) {
-                MacroBar(label: "CARBS", current: 198, target: 330, unit: "g", color: .green)
-                MacroBar(label: "PROTEIN", current: 79, target: 132, unit: "g", color: .green)
-                MacroBar(label: "FAT", current: 52, target: 80, unit: "g", color: .green)
+                MacroBar(label: "CARBS", current: currentCarbs, target: targetCarbs, unit: "g", color: .green)
+                MacroBar(label: "PROTEIN", current: currentProtein, target: targetProtein, unit: "g", color: .green)
+                MacroBar(label: "FAT", current: currentFat, target: targetFat, unit: "g", color: .green)
             }
             .padding(.horizontal, UIScreen.isSmallDevice ? 20 : 25)
             .padding(.bottom, UIScreen.isSmallDevice ? 10 : 12)
