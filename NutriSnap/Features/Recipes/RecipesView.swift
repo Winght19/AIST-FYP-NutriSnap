@@ -3,99 +3,108 @@ import SwiftUI
 struct RecipesView: View {
     @State private var viewModel = RecipesViewModel()
     @State private var showFilter = false
+    @State private var showAIPage = false
     
     var body: some View {
         NavigationView {
-            VStack(spacing: 0) {
-                // Search Bar and Filter Button
-                HStack(spacing: 12) {
-                    HStack {
-                        Image(systemName: "magnifyingglass")
-                            .foregroundColor(.gray)
-                        TextField("Search recipes", text: $viewModel.searchText)
-                            .onSubmit {
-                                Task { await viewModel.fetchRecipes() }
-                            }
-                    }
-                    .padding(12)
-                    .background(Color(uiColor: .secondarySystemGroupedBackground))
-                    .cornerRadius(12)
-                    
-                    Button(action: { showFilter = true }) {
-                        Image(systemName: "slider.horizontal.3")
-                            .font(.title3)
-                            .foregroundColor(.primary)
-                            .padding(12)
-                            .background(Color(.systemGray6))
-                            .cornerRadius(12)
-                    }
+            ZStack {
+                // Hidden NavigationLink for AI Page
+                NavigationLink(destination: RecipeAIRecommendationView(), isActive: $showAIPage) {
+                    EmptyView()
                 }
-                .padding(.horizontal)
-                .padding(.top, 8)
-                .padding(.bottom, 16)
+                .hidden()
                 
-                // Results Count
-                HStack {
-                    if viewModel.isLoading {
-                        ProgressView()
-                            .padding(.trailing, 8)
-                    }
-                    if viewModel.totalCount > 0 {
-                        Text("\(viewModel.recipes.count) of \(viewModel.totalCount) results")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                    } else if !viewModel.isLoading {
-                        Text("\(viewModel.recipes.count) results")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                    }
-                    Spacer()
-                }
-                .padding(.horizontal)
-                .padding(.bottom, 8)
-                
-                // Recipe List
-                ScrollView {
-                    LazyVStack(spacing: 12) {
-                        ForEach(viewModel.recipes) { recipe in
-                            // Find 'Calories' nutrient
-                            let caloriesNutrient = recipe.recipeNutrients?.first(where: {
-                                $0.nutrient.name.lowercased() == "calories"
-                            })
-                            let caloriesString = caloriesNutrient != nil ? String(format: "%.0f kcal", caloriesNutrient!.amount) : "N/A"
-                            
-                            NavigationLink(destination: RecipeDetailView(recipeId: recipe.id)) {
-                                RecipeCard(
-                                    title: recipe.title,
-                                    cuisine: recipe.cuisine?.name ?? "Unknown",
-                                    difficulty: recipe.difficulty?.name ?? "Unknown",
-                                    calories: caloriesString
-                                )
-                            }
-                            .buttonStyle(PlainButtonStyle())
-                            .onAppear {
-                                // Trigger load more when the last item appears
-                                if recipe.id == viewModel.recipes.last?.id {
-                                    Task { await viewModel.loadMoreRecipes() }
+                VStack(spacing: 0) {
+                    // Search Bar and Filter Button
+                    HStack(spacing: 12) {
+                        HStack {
+                            Image(systemName: "magnifyingglass")
+                                .foregroundColor(.gray)
+                            TextField("Search recipes", text: $viewModel.searchText)
+                                .onSubmit {
+                                    Task { await viewModel.fetchRecipes() }
                                 }
-                            }
+                        }
+                        .padding(12)
+                        .background(Color(uiColor: .secondarySystemGroupedBackground))
+                        .cornerRadius(12)
+                        
+                        Button(action: { showFilter = true }) {
+                            Image(systemName: "slider.horizontal.3")
+                                .font(.title3)
+                                .foregroundColor(.primary)
+                                .padding(12)
+                                .background(Color(.systemGray6))
+                                .cornerRadius(12)
                         }
                     }
                     .padding(.horizontal)
+                    .padding(.top, 8)
+                    .padding(.bottom, 16)
                     
-                    // Skeleton cards below the recipe list while loading
-                    if viewModel.isLoading || viewModel.isLoadingMore {
+                    // Results Count
+                    HStack {
+                        if viewModel.isLoading {
+                            ProgressView()
+                                .padding(.trailing, 8)
+                        }
+                        if viewModel.totalCount > 0 {
+                            Text("\(viewModel.recipes.count) of \(viewModel.totalCount) results")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                        } else if !viewModel.isLoading {
+                            Text("\(viewModel.recipes.count) results")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 8)
+                    
+                    // Recipe List
+                    ScrollView {
                         LazyVStack(spacing: 12) {
-                            ForEach(0..<3, id: \.self) { _ in
-                                RecipeSkeletonCard()
+                            ForEach(viewModel.recipes) { recipe in
+                                // Find 'Calories' nutrient
+                                let caloriesNutrient = recipe.recipeNutrients?.first(where: {
+                                    $0.nutrient.name.lowercased() == "calories"
+                                })
+                                let caloriesString = caloriesNutrient != nil ? String(format: "%.0f kcal", caloriesNutrient!.amount) : "N/A"
+                                
+                                NavigationLink(destination: RecipeDetailView(recipeId: recipe.id)) {
+                                    RecipeCard(
+                                        title: recipe.title,
+                                        cuisine: recipe.cuisine?.name ?? "Unknown",
+                                        difficulty: recipe.difficulty?.name ?? "Unknown",
+                                        calories: caloriesString
+                                    )
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                .onAppear {
+                                    // Trigger load more when the last item appears
+                                    if recipe.id == viewModel.recipes.last?.id {
+                                        Task { await viewModel.loadMoreRecipes() }
+                                    }
+                                }
                             }
                         }
                         .padding(.horizontal)
+                        
+                        // Skeleton cards below the recipe list while loading
+                        if viewModel.isLoading || viewModel.isLoadingMore {
+                            LazyVStack(spacing: 12) {
+                                ForEach(0..<3, id: \.self) { _ in
+                                    RecipeSkeletonCard()
+                                }
+                            }
+                            .padding(.horizontal)
+                        }
+                        
+                        Spacer().frame(height: 100)
                     }
-                    
-                    Spacer().frame(height: 100)
+                    .background(Color(red: 0.95, green: 0.98, blue: 0.93)) // Light greenish-yellow background
                 }
-                .background(Color(red: 0.95, green: 0.98, blue: 0.93)) // Light greenish-yellow background
             }
             .navigationTitle("Recipes")
             .navigationBarTitleDisplayMode(.inline)
@@ -106,6 +115,20 @@ struct RecipesView: View {
                             .foregroundColor(.primary)
                     }
                 }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                // Real implementation of the AI Assistant Button floating at the bottom right
+                Button(action: { showAIPage = true }) {
+                    Image(systemName: "sparkles")
+                        .font(.title2)
+                        .foregroundColor(.black)
+                        .padding(16)
+                        .background(Color(.systemGray6))
+                        .clipShape(Circle())
+                        .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)
+                }
+                .padding(.trailing, 24)
+                .padding(.bottom, 24)
             }
         }
         .sheet(isPresented: $showFilter) {
