@@ -6,14 +6,8 @@ struct RecipesView: View {
     @State private var showAIPage = false
     
     var body: some View {
-        NavigationView {
+        NavigationStack {
             ZStack {
-                // Hidden NavigationLink for AI Page
-                NavigationLink(destination: RecipeAIRecommendationView(), isActive: $showAIPage) {
-                    EmptyView()
-                }
-                .hidden()
-                
                 VStack(spacing: 0) {
                     // Search Bar and Filter Button
                     HStack(spacing: 12) {
@@ -115,6 +109,9 @@ struct RecipesView: View {
                             .foregroundColor(.primary)
                     }
                 }
+            }
+            .navigationDestination(isPresented: $showAIPage) {
+                RecipeAIRecommendationView()
             }
             .overlay(alignment: .bottomTrailing) {
                 // Real implementation of the AI Assistant Button floating at the bottom right

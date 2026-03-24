@@ -15,7 +15,7 @@ final class AppStateManager {
     private let syncService: SyncService
     let authManager: AuthenticationManager
 
-    nonisolated init(
+    init(
         keychainManager: KeychainManager? = nil,
         userProfileService: UserProfileService? = nil,
         syncService: SyncService? = nil,

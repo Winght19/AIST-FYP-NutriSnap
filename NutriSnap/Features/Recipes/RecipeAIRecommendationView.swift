@@ -2,14 +2,10 @@ import SwiftUI
 
 struct RecipeAIRecommendationView: View {
     @Environment(\.dismiss) var dismiss
+    @Environment(AppStateManager.self) private var appStateManager
     
-    enum ScreenState {
-        case input
-        case loading
-        case result
-    }
+    @StateObject private var viewModel = RecipeAIRecommendationViewModel()
     
-    @State private var viewState: ScreenState = .input
     @State private var promptText: String = ""
     
     // Form selections
@@ -25,19 +21,23 @@ struct RecipeAIRecommendationView: View {
     let darkBlue = Color(red: 0.25, green: 0.55, blue: 0.85)
     let pillGreen = Color(red: 0.65, green: 0.9, blue: 0.75)
     
-    // Mock results
-    let mockResults: [RecipeMock] = [
-        RecipeMock(title: "Authentic Spaghetti", cuisine: "Italian", difficulty: "Easy", calories: "450 kcal"),
-        RecipeMock(title: "Saucy Ramen Noodles", cuisine: "Japanese", difficulty: "Easy", calories: "520 kcal")
-    ]
+    // Static lists for Dropdowns matching RecipesViewModel
+    let cuisines = ["Select", "Chinese", "Japanese", "Korean", "Southern US", "Italian", "Mexican", "French", "Indian", "British", "Russian", "Greek", "Cajun Creole", "Filipino", "Irish", "Jamaican", "Thai", "Spanish", "Moroccan", "Brazilian", "Vietnamese"]
+    let mealTypes = ["Select", "Breakfast", "Lunch", "Dinner", "Snack", "Dessert"]
+    let diets = ["Select", "High Protein", "Gluten Free", "Low Fat", "Vegetarian", "Vegan", "Low Carb", "Diabetic", "Paleo", "Low Calorie", "Keto"]
+    let allergens = ["Select", "Soy", "Sesame", "Peanut", "Milk", "Egg", "Wheat", "Tree Nut", "Shellfish", "Fish"]
+    let mainIngredients = ["Select", "Chicken", "Beef", "Pork", "Fish", "Tofu", "Rice", "Pasta", "Potato", "Tomato", "Cheese"]
     
     var body: some View {
         VStack(spacing: 0) {
             // Custom Navigation Bar
             HStack {
                 Button(action: {
-                    if viewState == .result {
-                        withAnimation { viewState = .input }
+                    if !viewModel.recommendationText.isEmpty {
+                        withAnimation { 
+                            // Go back to input
+                            viewModel.recommendationText = "" 
+                        }
                     } else {
                         dismiss()
                     }
@@ -61,20 +61,28 @@ struct RecipeAIRecommendationView: View {
             .padding()
             .background(Color.white)
             
-            if viewState == .loading {
+            if viewModel.isTyping {
                 loadingView
             } else {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         
                         // Top Blue Banner
-                        if viewState == .input {
+                        if viewModel.recommendationText.isEmpty {
                             inputBannerView
-                        } else if viewState == .result {
+                        } else {
                             resultBannerView
                         }
                         
-                        if viewState == .input {
+                        // Error message
+                        if let error = viewModel.errorMessage {
+                            Text(error)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                                .frame(maxWidth: .infinity, alignment: .center)
+                        }
+                        
+                        if viewModel.recommendationText.isEmpty {
                             // Find by Preference Section
                             Text("Find by Preference")
                                 .font(.title3)
@@ -84,11 +92,11 @@ struct RecipeAIRecommendationView: View {
                                 .padding(.top, 8)
                             
                             VStack(spacing: 16) {
-                                FormDropdown(label: "Cuisine", selection: $cuisine)
-                                FormDropdown(label: "Meal Type", selection: $mealType)
-                                FormDropdown(label: "Diet", selection: $diet)
-                                FormDropdown(label: "Allergen", selection: $allergen)
-                                FormDropdown(label: "Main Ingredient", selection: $mainIngredient)
+                                FormDropdown(label: "Cuisine", selection: $cuisine, options: cuisines)
+                                FormDropdown(label: "Meal Type", selection: $mealType, options: mealTypes)
+                                FormDropdown(label: "Diet", selection: $diet, options: diets)
+                                FormDropdown(label: "Allergen", selection: $allergen, options: allergens)
+                                FormDropdown(label: "Main Ingredient", selection: $mainIngredient, options: mainIngredients)
                             }
                             
                             // Difficulty Pills
@@ -103,15 +111,7 @@ struct RecipeAIRecommendationView: View {
                             
                             // Search Button
                             Button(action: {
-                                withAnimation {
-                                    viewState = .loading
-                                }
-                                // Simulate network request
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                                    withAnimation {
-                                        viewState = .result
-                                    }
-                                }
+                                performSearch()
                             }) {
                                 Text("Search")
                                     .fontWeight(.bold)
@@ -124,16 +124,31 @@ struct RecipeAIRecommendationView: View {
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.top, 10)
                             
-                        } else if viewState == .result {
+                        } else {
                             // Recipes Recommended Section
-                            Text("Recipes Recommended")
-                                .font(.title3)
-                                .fontWeight(.bold)
-                                .padding(.top, 8)
-                            
-                            VStack(spacing: 12) {
-                                ForEach(mockResults) { recipe in
-                                    RecipeCard(title: recipe.title, cuisine: recipe.cuisine, difficulty: recipe.difficulty, calories: recipe.calories)
+                            if !viewModel.recommendedRecipes.isEmpty {
+                                Text("Recipes Recommended")
+                                    .font(.title3)
+                                    .fontWeight(.bold)
+                                    .padding(.top, 8)
+                                
+                                VStack(spacing: 12) {
+                                    ForEach(viewModel.recommendedRecipes) { recipe in
+                                        let caloriesNutrient = recipe.recipeNutrients?.first(where: {
+                                            $0.nutrient.name.lowercased() == "calories"
+                                        })
+                                        let caloriesString = caloriesNutrient != nil ? String(format: "%.0f kcal", caloriesNutrient!.amount) : "N/A"
+                                        
+                                        NavigationLink(destination: RecipeDetailView(recipeId: recipe.id)) {
+                                            RecipeCard(
+                                                title: recipe.title,
+                                                cuisine: recipe.cuisine?.name ?? "Unknown",
+                                                difficulty: recipe.difficulty?.name ?? "Unknown",
+                                                calories: caloriesString
+                                            )
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                    }
                                 }
                             }
                         }
@@ -144,6 +159,30 @@ struct RecipeAIRecommendationView: View {
             }
         }
         .navigationBarHidden(true)
+    }
+    
+    private func performSearch() {
+        // Compile preferences to assist the AI
+        var queryStr = promptText
+        var preferences: [String] = []
+        
+        if cuisine != "Select" { preferences.append("Cuisine is \(cuisine)") }
+        if mealType != "Select" { preferences.append("Meal Type is \(mealType)") }
+        if diet != "Select" { preferences.append("Diet is \(diet)") }
+        if allergen != "Select" { preferences.append("Must exclude \(allergen)") }
+        if mainIngredient != "Select" { preferences.append("Main Ingredient is \(mainIngredient)") }
+        if !difficulty.isEmpty { preferences.append("Difficulty should be \(difficulty)") }
+        
+        if !preferences.isEmpty {
+            queryStr += " (Preferences: " + preferences.joined(separator: ", ") + ")"
+        }
+        
+        Task {
+            await viewModel.fetchRecommendation(
+                query: queryStr,
+                currentUser: appStateManager.currentUser
+            )
+        }
     }
     
     // MARK: - Banner Views
@@ -159,12 +198,30 @@ struct RecipeAIRecommendationView: View {
                 .font(.subheadline)
                 .foregroundColor(.white)
             
-            TextField("E.g. I want a high protein fine dining", text: $promptText)
-                .padding()
-                .background(darkBlue)
-                .foregroundColor(.white)
-                .cornerRadius(12)
-                .padding(.top, 8)
+            HStack(spacing: 8) {
+                TextField("E.g. I want a high protein fine dining", text: $promptText)
+                    .padding()
+                    .background(darkBlue)
+                    .foregroundColor(.white)
+                    .cornerRadius(12)
+                    .onSubmit {
+                        performSearch()
+                    }
+                
+                Button(action: {
+                    performSearch()
+                }) {
+                    Image(systemName: "paperplane.fill")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundColor(.white)
+                        .padding(14)
+                        .background(darkBlue)
+                        .clipShape(Circle())
+                }
+                .disabled(promptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .opacity(promptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.6 : 1.0)
+            }
+            .padding(.top, 8)
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -179,7 +236,7 @@ struct RecipeAIRecommendationView: View {
                     .foregroundColor(.white)
                     .font(.headline)
                 
-                Text("You're looking for a hearty dinner, and we've found some delicious options for you! We noticed you're a bit low on protein, carbs, and fiber today, and these selections are a great way to help you deliciously catch up on those nutrients.")
+                Text(viewModel.recommendationText)
                     .font(.subheadline)
                     .fontWeight(.medium)
                     .foregroundColor(.white)
@@ -187,7 +244,9 @@ struct RecipeAIRecommendationView: View {
             }
             
             Button(action: {
-                withAnimation { viewState = .input }
+                withAnimation { 
+                    viewModel.recommendationText = "" 
+                }
             }) {
                 Text("Tell AI what you would like to adjust")
                     .font(.caption)
@@ -230,6 +289,7 @@ struct RecipeAIRecommendationView: View {
 struct FormDropdown: View {
     let label: String
     @Binding var selection: String
+    let options: [String]
     
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -238,8 +298,9 @@ struct FormDropdown: View {
                 .fontWeight(.semibold)
             
             Menu {
-                Button("Option 1", action: { selection = "Option 1" })
-                Button("Option 2", action: { selection = "Option 2" })
+                ForEach(options, id: \.self) { option in
+                    Button(option, action: { selection = option })
+                }
             } label: {
                 HStack {
                     Text(selection)
