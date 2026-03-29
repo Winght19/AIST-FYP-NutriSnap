@@ -283,33 +283,53 @@ private struct SleepTrendView: View {
             }
 
             GeometryReader { geometry in
-                HStack(alignment: .bottom, spacing: 4) {
-                    ForEach(Array(chartData.enumerated()), id: \.offset) { index, data in
-                        VStack(spacing: 4) {
+                let spacing: CGFloat = 4
+                let barWidth = (geometry.size.width - CGFloat(max(chartData.count - 1, 0)) * spacing) / CGFloat(max(chartData.count, 1))
+                let labelWidth: CGFloat = UIScreen.isSmallDevice ? 22 : 26
+
+                VStack(spacing: 4) {
+                    HStack(alignment: .bottom, spacing: spacing) {
+                        ForEach(Array(chartData.enumerated()), id: \.offset) { index, data in
                             if let value = data.value, value > 0 {
                                 RoundedRectangle(cornerRadius: 3)
                                     .fill(Color.indigo)
                                     .frame(
-                                        width: (geometry.size.width - CGFloat(max(chartData.count - 1, 0)) * 4) / CGFloat(max(chartData.count, 1)),
+                                        width: barWidth,
                                         height: max(value / maxValue * (UIScreen.isSmallDevice ? 120 : 150), 4)
                                     )
                             } else {
                                 RoundedRectangle(cornerRadius: 3)
                                     .fill(Color.gray.opacity(0.1))
                                     .frame(
-                                        width: (geometry.size.width - CGFloat(max(chartData.count - 1, 0)) * 4) / CGFloat(max(chartData.count, 1)),
+                                        width: barWidth,
                                         height: 4
                                     )
                             }
-
-                            Text(data.day)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .frame(height: 16)
-                                .opacity(data.day.isEmpty ? 0 : 1)
                         }
-                        .id(index)
                     }
+
+                    ZStack(alignment: .leading) {
+                        ForEach(Array(chartData.enumerated()), id: \.offset) { index, data in
+                            if !data.day.isEmpty {
+                                Text(data.day)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: labelWidth, height: 16)
+                                    .minimumScaleFactor(0.8)
+                                    .lineLimit(1)
+                                    .offset(
+                                        x: labelOffset(
+                                            for: index,
+                                            barWidth: barWidth,
+                                            spacing: spacing,
+                                            totalWidth: geometry.size.width,
+                                            labelWidth: labelWidth
+                                        )
+                                    )
+                            }
+                        }
+                    }
+                    .frame(width: geometry.size.width, height: 16, alignment: .leading)
                 }
             }
             .frame(height: UIScreen.isSmallDevice ? 150 : 180)
@@ -320,6 +340,17 @@ private struct SleepTrendView: View {
         .task(id: timePeriod.title) {
             await loadSleepData()
         }
+    }
+
+    private func labelOffset(
+        for index: Int,
+        barWidth: CGFloat,
+        spacing: CGFloat,
+        totalWidth: CGFloat,
+        labelWidth: CGFloat
+    ) -> CGFloat {
+        let centeredX = CGFloat(index) * (barWidth + spacing) + (barWidth / 2) - (labelWidth / 2)
+        return min(max(centeredX, 0), max(totalWidth - labelWidth, 0))
     }
 
     @MainActor
