@@ -256,9 +256,10 @@ private struct SleepTrendView: View {
 
     private var periodLabel: String {
         switch timePeriod {
-        case .day: return "TOTAL SLEEP"
-        case .week, .month: return "AVERAGE SLEEP"
-        case .sixMonths, .year: return "DAILY AVERAGE"
+        case .day:
+            return "Total"
+        case .week, .month, .sixMonths, .year:
+            return "Average"
         }
     }
 

@@ -711,7 +711,7 @@ struct PeriodSelectionSheet: View {
 
                         Picker("Year", selection: $tempYear) {
                             ForEach(availableYears, id: \.self) { year in
-                                Text("\(year)").tag(year)
+                                Text(verbatim: String(year)).tag(year)
                             }
                         }
                         .pickerStyle(.wheel)
@@ -730,7 +730,7 @@ struct PeriodSelectionSheet: View {
 
                         Picker("Year", selection: $tempYear) {
                             ForEach(availableYears, id: \.self) { year in
-                                Text("\(year)").tag(year)
+                                Text(verbatim: String(year)).tag(year)
                             }
                         }
                         .pickerStyle(.wheel)
@@ -741,7 +741,7 @@ struct PeriodSelectionSheet: View {
                 case .year:
                     Picker("Year", selection: $tempYear) {
                         ForEach(availableYears, id: \.self) { year in
-                            Text("\(year)").tag(year)
+                            Text(verbatim: String(year)).tag(year)
                         }
                     }
                     .pickerStyle(.wheel)
@@ -919,11 +919,10 @@ struct ExerciseTrendView: View {
 
     private var periodLabel: String {
         switch timePeriod {
-        case .day: return "TOTAL"
-        case .week: return "AVERAGE"
-        case .month: return "AVERAGE"
-        case .sixMonths: return "DAILY AVERAGE"
-        case .year: return "DAILY AVERAGE"
+        case .day:
+            return "Total"
+        case .week, .month, .sixMonths, .year:
+            return "Average"
         }
     }
     
