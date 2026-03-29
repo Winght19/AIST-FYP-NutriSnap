@@ -78,7 +78,7 @@ struct LogsView: View {
                         ForEach(logsForSelectedDate) { log in
                             LogEntryRow(
                                 log: log,
-                                onDelete: { modelContext.delete(log) }
+                                onDelete: { delete(log) }
                             )
                         }
                     }
@@ -107,6 +107,9 @@ struct LogsView: View {
             }
             .presentationDetents([.medium])
         }
+        .task {
+            FoodLogImageStore.shared.reconcileStorage(modelContext: modelContext)
+        }
     }
     
     private func previousDay() {
@@ -116,6 +119,12 @@ struct LogsView: View {
     private func nextDay() {
         selectedDate = Calendar.current.date(byAdding: .day, value: 1, to: selectedDate) ?? selectedDate
     }
+
+    private func delete(_ log: FoodLog) {
+        FoodLogImageStore.shared.deleteImage(at: log.imagePath)
+        modelContext.delete(log)
+        try? modelContext.save()
+    }
 }
 
 struct LogEntryRow: View {
@@ -123,8 +132,7 @@ struct LogEntryRow: View {
     let onDelete: () -> Void
 
     private var loadedImage: UIImage? {
-        guard let path = log.imagePath else { return nil }
-        return UIImage(contentsOfFile: path)
+        FoodLogImageStore.shared.image(for: log.imagePath)
     }
 
     private var timeString: String {
@@ -279,8 +287,7 @@ struct FoodLogDetailView: View {
     private let accentColor = Color(red: 0.85, green: 0.55, blue: 0.55)
 
     private var loadedImage: UIImage? {
-        guard let path = log.imagePath else { return nil }
-        return UIImage(contentsOfFile: path)
+        FoodLogImageStore.shared.image(for: log.imagePath)
     }
 
     private var currentDateString: String {

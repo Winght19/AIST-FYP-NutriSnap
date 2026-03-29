@@ -1,9 +1,33 @@
 import SwiftUI
+import HealthKit
 
 struct ActivityDetailView: View {
     @Environment(\.dismiss) var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @State private var selectedActivityType: ActivityType = .exercise
-    @State private var selectedTimePeriod: TimePeriod = .week
+    @State private var selectedTimePeriod: TimePeriod = .day
+    @State private var dashboardMetrics = HealthDashboardMetrics.empty
+
+    init(initialMetrics: HealthDashboardMetrics = .empty) {
+        _dashboardMetrics = State(initialValue: initialMetrics)
+    }
+
+    private var progressPercentage: Double {
+        let goal = selectedActivityType.goal
+        guard goal > 0 else { return 0 }
+
+        let value: Double
+        switch selectedActivityType {
+        case .steps:
+            value = dashboardMetrics.steps
+        case .exercise:
+            value = dashboardMetrics.exerciseMinutes
+        case .stand:
+            value = dashboardMetrics.standMinutes
+        }
+
+        return min(max(value / goal, 0), 1)
+    }
     
     var body: some View {
         ZStack(alignment: .top) {
@@ -42,7 +66,7 @@ struct ActivityDetailView: View {
                 ScrollView {
                     VStack(spacing: UIScreen.isSmallDevice ? 20 : 32) {
                         // Progress Circle
-                        ProgressCircleView(percentage: 0.66, activityType: selectedActivityType)
+                        ProgressCircleView(percentage: progressPercentage, activityType: selectedActivityType)
                             .padding(.top, UIScreen.isSmallDevice ? 8 : 16)
                         
                         // Activity Type Selector
@@ -53,7 +77,11 @@ struct ActivityDetailView: View {
                             .padding(.horizontal)
                         
                         // Exercise Trend Chart
-                        ExerciseTrendView(timePeriod: selectedTimePeriod, activityType: selectedActivityType)
+                        ExerciseTrendView(
+                            timePeriod: selectedTimePeriod,
+                            activityType: selectedActivityType,
+                            todayMetrics: dashboardMetrics
+                        )
                             .padding(.horizontal)
                     }
                     .padding(.bottom, 100)
@@ -61,6 +89,23 @@ struct ActivityDetailView: View {
             }
         }
         .navigationBarHidden(true)
+        .task {
+            do {
+                dashboardMetrics = try await HealthKitService.shared.fetchDashboardMetrics()
+            } catch {
+                dashboardMetrics = .empty
+            }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active else { return }
+            Task {
+                do {
+                    dashboardMetrics = try await HealthKitService.shared.fetchDashboardMetrics()
+                } catch {
+                    dashboardMetrics = .empty
+                }
+            }
+        }
     }
 }
 
@@ -93,6 +138,29 @@ enum ActivityType {
         case .stand: return .cyan
         }
     }
+
+    var goal: Double {
+        switch self {
+        case .steps: return 10000
+        case .exercise: return 30
+        case .stand: return 120
+        }
+    }
+
+    var hkIdentifier: HKQuantityTypeIdentifier {
+        switch self {
+        case .steps: return .stepCount
+        case .exercise: return .appleExerciseTime
+        case .stand: return .appleStandTime
+        }
+    }
+
+    var hkUnit: HKUnit {
+        switch self {
+        case .steps: return .count()
+        case .exercise, .stand: return .minute()
+        }
+    }
 }
 
 // MARK: - Time Period Enum
@@ -110,6 +178,165 @@ enum TimePeriod {
         case .month: return "M"
         case .sixMonths: return "6M"
         case .year: return "Y"
+        }
+    }
+}
+
+struct TimePeriodChartBucket {
+    let date: Date
+    let label: String
+}
+
+struct TimePeriodChartConfig {
+    let startDate: Date
+    let queryEndDate: Date
+    let displayEndDate: Date
+    let interval: DateComponents
+    let anchorDate: Date
+    let buckets: [TimePeriodChartBucket]
+
+    func elapsedBucketCount(asOf referenceDate: Date) -> Int {
+        let effectiveDate = min(referenceDate, displayEndDate)
+        let count = buckets.prefix { $0.date <= effectiveDate }.count
+        return max(count, 1)
+    }
+
+    func elapsedDayCount(asOf referenceDate: Date, calendar: Calendar = .current) -> Int {
+        let effectiveDate = min(referenceDate, displayEndDate)
+        let startDay = calendar.startOfDay(for: startDate)
+        let endDay = calendar.startOfDay(for: effectiveDate)
+        let dayCount = (calendar.dateComponents([.day], from: startDay, to: endDay).day ?? 0) + 1
+        return max(dayCount, 1)
+    }
+}
+
+extension Calendar {
+    func mondayStartOfWeek(containing date: Date) -> Date {
+        let dayStart = startOfDay(for: date)
+        let weekday = component(.weekday, from: dayStart)
+        let offset = (weekday + 5) % 7
+        return self.date(byAdding: .day, value: -offset, to: dayStart) ?? dayStart
+    }
+}
+
+extension TimePeriod {
+    func staticChartConfig(referenceDate: Date = Date(), calendar: Calendar = .current) -> TimePeriodChartConfig {
+        switch self {
+        case .day:
+            let startDay = calendar.startOfDay(for: referenceDate)
+            let endDay = calendar.date(byAdding: .day, value: 1, to: startDay) ?? startDay
+            let labeledHours = Set([0, 6, 12, 18, 23])
+            let buckets = (0..<24).map { offset in
+                let date = calendar.date(byAdding: .hour, value: offset, to: startDay) ?? startDay
+                let label = labeledHours.contains(offset) ? String(format: "%02d", offset) : ""
+                return TimePeriodChartBucket(date: date, label: label)
+            }
+
+            return TimePeriodChartConfig(
+                startDate: startDay,
+                queryEndDate: endDay,
+                displayEndDate: calendar.date(byAdding: .hour, value: 23, to: startDay) ?? startDay,
+                interval: DateComponents(hour: 1),
+                anchorDate: startDay,
+                buckets: buckets
+            )
+
+        case .week:
+            let startDay = calendar.mondayStartOfWeek(containing: referenceDate)
+            let endDay = calendar.date(byAdding: .day, value: 7, to: startDay) ?? startDay
+            let buckets = (0..<7).map { offset in
+                let date = calendar.date(byAdding: .day, value: offset, to: startDay) ?? startDay
+                let label = calendar.shortWeekdaySymbols[calendar.component(.weekday, from: date) - 1]
+                return TimePeriodChartBucket(date: date, label: label)
+            }
+
+            return TimePeriodChartConfig(
+                startDate: startDay,
+                queryEndDate: endDay,
+                displayEndDate: calendar.date(byAdding: .day, value: 6, to: startDay) ?? startDay,
+                interval: DateComponents(day: 1),
+                anchorDate: startDay,
+                buckets: buckets
+            )
+
+        case .month:
+            let monthInterval = calendar.dateInterval(of: .month, for: referenceDate) ?? DateInterval(start: referenceDate, duration: 0)
+            let startDay = monthInterval.start
+            let dayCount = calendar.dateComponents([.day], from: monthInterval.start, to: monthInterval.end).day ?? 30
+            let labelOffsets = Set([0, 7, 14, 21, max(dayCount - 1, 0)])
+            let buckets = (0..<dayCount).map { offset in
+                let date = calendar.date(byAdding: .day, value: offset, to: startDay) ?? startDay
+                let label = labelOffsets.contains(offset) ? "\(calendar.component(.day, from: date))" : ""
+                return TimePeriodChartBucket(date: date, label: label)
+            }
+
+            return TimePeriodChartConfig(
+                startDate: startDay,
+                queryEndDate: monthInterval.end,
+                displayEndDate: calendar.date(byAdding: .day, value: -1, to: monthInterval.end) ?? startDay,
+                interval: DateComponents(day: 1),
+                anchorDate: startDay,
+                buckets: buckets
+            )
+
+        case .sixMonths:
+            let year = calendar.component(.year, from: referenceDate)
+            let month = calendar.component(.month, from: referenceDate)
+            let startMonth = month <= 6 ? 1 : 7
+            let startDate = calendar.date(from: DateComponents(year: year, month: startMonth, day: 1)) ?? referenceDate
+            let queryEndDate = calendar.date(byAdding: .month, value: 6, to: startDate) ?? startDate
+            let buckets = (0..<6).map { offset in
+                let date = calendar.date(byAdding: .month, value: offset, to: startDate) ?? startDate
+                let label = calendar.shortMonthSymbols[calendar.component(.month, from: date) - 1]
+                return TimePeriodChartBucket(date: date, label: label)
+            }
+
+            return TimePeriodChartConfig(
+                startDate: startDate,
+                queryEndDate: queryEndDate,
+                displayEndDate: calendar.date(byAdding: .day, value: -1, to: queryEndDate) ?? startDate,
+                interval: DateComponents(month: 1),
+                anchorDate: startDate,
+                buckets: buckets
+            )
+
+        case .year:
+            let yearInterval = calendar.dateInterval(of: .year, for: referenceDate) ?? DateInterval(start: referenceDate, duration: 0)
+            let startDate = yearInterval.start
+            let buckets = (0..<12).map { offset in
+                let date = calendar.date(byAdding: .month, value: offset, to: startDate) ?? startDate
+                let label = calendar.veryShortMonthSymbols[calendar.component(.month, from: date) - 1]
+                return TimePeriodChartBucket(date: date, label: label)
+            }
+
+            return TimePeriodChartConfig(
+                startDate: startDate,
+                queryEndDate: yearInterval.end,
+                displayEndDate: calendar.date(byAdding: .day, value: -1, to: yearInterval.end) ?? startDate,
+                interval: DateComponents(month: 1),
+                anchorDate: startDate,
+                buckets: buckets
+            )
+        }
+    }
+
+    func staticRangeDescription(referenceDate: Date = Date(), calendar: Calendar = .current) -> String {
+        let config = staticChartConfig(referenceDate: referenceDate, calendar: calendar)
+        let formatter = DateFormatter()
+
+        switch self {
+        case .day:
+            formatter.dateFormat = "EEEE"
+            return formatter.string(from: referenceDate)
+        case .week, .month:
+            formatter.dateFormat = "MMM d"
+            return "\(formatter.string(from: config.startDate))–\(formatter.string(from: config.displayEndDate)), \(calendar.component(.year, from: config.displayEndDate))"
+        case .sixMonths:
+            formatter.dateFormat = "MMM d, yyyy"
+            return "\(formatter.string(from: config.startDate))–\(formatter.string(from: config.displayEndDate))"
+        case .year:
+            formatter.dateFormat = "MMM yyyy"
+            return "\(formatter.string(from: config.startDate))–\(formatter.string(from: config.displayEndDate))"
         }
     }
 }
@@ -257,209 +484,9 @@ struct TimePeriodSelector: View {
 struct ExerciseTrendView: View {
     let timePeriod: TimePeriod
     let activityType: ActivityType
-    
-    // Get current day of week (1 = Sunday, 2 = Monday, etc.)
-    private var currentWeekday: Int {
-        Calendar.current.component(.weekday, from: Date())
-    }
-    
-    // Get current hour
-    private var currentHour: Int {
-        Calendar.current.component(.hour, from: Date())
-    }
-    
-    // Get current week of month
-    private var currentWeekOfMonth: Int {
-        let calendar = Calendar.current
-        let weekOfMonth = calendar.component(.weekOfMonth, from: Date())
-        return weekOfMonth
-    }
-    
-    // Get current month
-    private var currentMonth: Int {
-        Calendar.current.component(.month, from: Date())
-    }
-    
-    // Sample data for the chart
-    private var chartData: [(day: String, value: Double?)] {
-        switch timePeriod {
-        case .day:
-            // ROLLING 24-HOUR WINDOW: Current hour is rightmost, 24 hours ago is leftmost
-            // Example: If now is 14:00, show [Yesterday 15:00, 16:00, ..., Today 13:00, 14:00]
-            var result: [(String, Double?)] = []
-            let sampleData: [Int: Double]
-            
-            switch activityType {
-            case .steps:
-                sampleData = [
-                    0: 150, 3: 50, 6: 300, 9: 800, 12: 1200, 15: 900, 18: 850, 21: 400
-                ]
-            case .exercise:
-                sampleData = [
-                    0: 0, 3: 0, 6: 5, 9: 15, 12: 20, 15: 10, 18: 25, 21: 8
-                ]
-            case .stand:
-                sampleData = [
-                    0: 0, 3: 0, 6: 30, 9: 60, 12: 45, 15: 50, 18: 55, 21: 30
-                ]
-            }
-            
-            // Generate 24 hours ending at current hour (offset 0 = now)
-            for offset in stride(from: -23, through: 0, by: 1) {
-                let hour = (currentHour + offset + 24) % 24
-                let value = sampleData[hour]
-                
-                // Only show labels at regular intervals (every 6 hours)
-                let label: String
-                if offset == -23 || offset == -12 || offset == -6 || offset == 0 {
-                    label = String(format: "%02d", hour)
-                } else {
-                    label = ""
-                }
-                
-                result.append((label, value))
-            }
-            return result
-            
-        case .week:
-            // ROLLING 7-DAY WINDOW: Today is rightmost, 6 days ago is leftmost
-            // Example: If today is Wed, show [Last Thu, Fri, Sat, Sun, Mon, Tue, Wed]
-            var result: [(String, Double?)] = []
-            let calendar = Calendar.current
-            let today = Date()
-            let sampleData: [Int: Double]
-            
-            switch activityType {
-            case .steps:
-                sampleData = [
-                    0: 3800, -1: 7000, -2: 10200, -3: 7200, -4: 6800, -5: 8500, -6: 9200
-                ]
-            case .exercise:
-                sampleData = [
-                    0: 15, -1: 30, -2: 45, -3: 25, -4: 20, -5: 38, -6: 42
-                ]
-            case .stand:
-                sampleData = [
-                    0: 180, -1: 240, -2: 300, -3: 210, -4: 195, -5: 270, -6: 285
-                ]
-            }
-            
-            // Generate 7 days ending today (offset 0 = today)
-            for daysAgo in stride(from: -6, through: 0, by: 1) {
-                let date = calendar.date(byAdding: .day, value: daysAgo, to: today)!
-                let dayName = calendar.shortWeekdaySymbols[calendar.component(.weekday, from: date) - 1]
-                let value = sampleData[daysAgo]
-                result.append((dayName, value))
-            }
-            return result
-            
-        case .month:
-            // ROLLING 30-DAY WINDOW: Today is rightmost, 29 days ago is leftmost
-            // NOT calendar month - shows last 30 days regardless of month boundaries
-            var result: [(String, Double?)] = []
-            let calendar = Calendar.current
-            let today = Date()
-            let randomValues: [Double]
-            
-            switch activityType {
-            case .steps:
-                randomValues = [
-                    5200, 6300, 7100, 5800, 6500, 7200, 8100, 5900, 6700, 7500,
-                    6200, 5400, 7800, 6900, 7300, 5600, 6100, 7600, 8200, 6400,
-                    5700, 6800, 7400, 5500, 6600, 7000, 5300, 6200, 7100, 6500
-                ]
-            case .exercise:
-                randomValues = [
-                    25, 30, 35, 22, 28, 32, 40, 26, 31, 36,
-                    28, 20, 38, 33, 35, 24, 27, 37, 42, 29,
-                    26, 32, 36, 23, 30, 34, 25, 28, 35, 30
-                ]
-            case .stand:
-                randomValues = [
-                    180, 210, 240, 165, 195, 225, 270, 185, 220, 255,
-                    195, 150, 260, 230, 240, 170, 200, 250, 280, 205,
-                    185, 225, 245, 160, 210, 235, 175, 195, 240, 210
-                ]
-            }
-            
-            // Generate 30 days ending today (offset 0 = today)
-            for daysAgo in stride(from: -29, through: 0, by: 1) {
-                let date = calendar.date(byAdding: .day, value: daysAgo, to: today)!
-                let day = calendar.component(.day, from: date)
-                
-                // Show labels at specific intervals for better visibility
-                let label: String
-                let position = daysAgo + 29  // Convert to 0-based index
-                if position == 0 || position == 7 || position == 14 || position == 21 || position == 29 {
-                    label = "\(day)"
-                } else {
-                    label = ""
-                }
-                
-                let value = randomValues[position]
-                result.append((label, value))
-            }
-            return result
-            
-        case .sixMonths:
-            // ROLLING 6-MONTH WINDOW: Current month is rightmost, 5 months ago is leftmost
-            // NOT fixed calendar period - shows last 6 months from today
-            var result: [(String, Double?)] = []
-            let calendar = Calendar.current
-            let today = Date()
-            let monthlyValues: [Double]
-            
-            switch activityType {
-            case .steps:
-                monthlyValues = [6800, 5500, 4800, 7800, 10500, 4200]
-            case .exercise:
-                monthlyValues = [28, 22, 20, 32, 42, 18]
-            case .stand:
-                monthlyValues = [220, 185, 170, 250, 300, 160]
-            }
-            
-            // Generate 6 months ending at current month (offset 0 = this month)
-            for monthsAgo in stride(from: -5, through: 0, by: 1) {
-                let date = calendar.date(byAdding: .month, value: monthsAgo, to: today)!
-                let monthName = calendar.shortMonthSymbols[calendar.component(.month, from: date) - 1]
-                let value = monthlyValues[monthsAgo + 5]
-                result.append((monthName, value))
-            }
-            return result
-            
-        case .year:
-            // ROLLING 12-MONTH WINDOW: Current month is rightmost, 11 months ago is leftmost
-            // NOT fixed calendar year - shows last 12 months from today
-            var result: [(String, Double?)] = []
-            let calendar = Calendar.current
-            let today = Date()
-            let yearlyValues: [Double]
-            
-            switch activityType {
-            case .steps:
-                yearlyValues = [
-                    6500, 4200, 5800, 4500, 4800, 10200, 6200, 5500, 4500, 3800, 8800, 3500
-                ]
-            case .exercise:
-                yearlyValues = [
-                    28, 18, 25, 20, 22, 42, 27, 24, 20, 16, 38, 15
-                ]
-            case .stand:
-                yearlyValues = [
-                    215, 160, 200, 175, 180, 295, 220, 195, 175, 150, 270, 140
-                ]
-            }
-            
-            // Generate 12 months ending at current month (offset 0 = this month)
-            for monthsAgo in stride(from: -11, through: 0, by: 1) {
-                let date = calendar.date(byAdding: .month, value: monthsAgo, to: today)!
-                let monthSymbol = calendar.veryShortMonthSymbols[calendar.component(.month, from: date) - 1]
-                let value = yearlyValues[monthsAgo + 11]
-                result.append((monthSymbol, value))
-            }
-            return result
-        }
-    }
+    let todayMetrics: HealthDashboardMetrics
+    @State private var chartData: [(day: String, value: Double?)] = []
+    @State private var summaryValue: Double = 0
     
     private var maxValue: Double {
         chartData.compactMap { $0.value }.max() ?? 100
@@ -490,33 +517,53 @@ struct ExerciseTrendView: View {
             
             // Bar Chart
             GeometryReader { geometry in
-                HStack(alignment: .bottom, spacing: 4) {
-                    ForEach(Array(chartData.enumerated()), id: \.offset) { index, data in
-                        VStack(spacing: 4) {
+                let spacing: CGFloat = 4
+                let barWidth = (geometry.size.width - CGFloat(chartData.count - 1) * spacing) / CGFloat(max(chartData.count, 1))
+                let labelWidth: CGFloat = UIScreen.isSmallDevice ? 22 : 26
+
+                VStack(spacing: 4) {
+                    HStack(alignment: .bottom, spacing: spacing) {
+                        ForEach(Array(chartData.enumerated()), id: \.offset) { index, data in
                             if let value = data.value, value > 0 {
                                 RoundedRectangle(cornerRadius: 3)
                                     .fill(activityType.color)
                                     .frame(
-                                        width: (geometry.size.width - CGFloat(chartData.count - 1) * 4) / CGFloat(chartData.count),
+                                        width: barWidth,
                                         height: max(value / maxValue * (UIScreen.isSmallDevice ? 120 : 150), 4)
                                     )
                             } else {
                                 RoundedRectangle(cornerRadius: 3)
                                     .fill(Color.gray.opacity(0.1))
                                     .frame(
-                                        width: (geometry.size.width - CGFloat(chartData.count - 1) * 4) / CGFloat(chartData.count),
+                                        width: barWidth,
                                         height: 4
                                     )
                             }
-                            
-                            Text(data.day)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .frame(height: 16)
-                                .opacity(data.day.isEmpty ? 0 : 1)
                         }
-                        .id(index)
                     }
+
+                    ZStack(alignment: .leading) {
+                        ForEach(Array(chartData.enumerated()), id: \.offset) { index, data in
+                            if !data.day.isEmpty {
+                                Text(data.day)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .frame(width: labelWidth, height: 16)
+                                    .minimumScaleFactor(0.8)
+                                    .lineLimit(1)
+                                    .offset(
+                                        x: labelOffset(
+                                            for: index,
+                                            barWidth: barWidth,
+                                            spacing: spacing,
+                                            totalWidth: geometry.size.width,
+                                            labelWidth: labelWidth
+                                        )
+                                    )
+                            }
+                        }
+                    }
+                    .frame(width: geometry.size.width, height: 16, alignment: .leading)
                 }
             }
             .frame(height: UIScreen.isSmallDevice ? 150 : 180)
@@ -524,8 +571,22 @@ struct ExerciseTrendView: View {
         .padding()
         .background(Color(uiColor: .systemBackground))
         .cornerRadius(16)
+        .task(id: "\(activityType.title)-\(timePeriod.title)") {
+            await loadHealthKitData()
+        }
     }
-    
+
+    private func labelOffset(
+        for index: Int,
+        barWidth: CGFloat,
+        spacing: CGFloat,
+        totalWidth: CGFloat,
+        labelWidth: CGFloat
+    ) -> CGFloat {
+        let centeredX = CGFloat(index) * (barWidth + spacing) + (barWidth / 2) - (labelWidth / 2)
+        return min(max(centeredX, 0), max(totalWidth - labelWidth, 0))
+    }
+
     private var periodLabel: String {
         switch timePeriod {
         case .day: return "TOTAL"
@@ -537,46 +598,87 @@ struct ExerciseTrendView: View {
     }
     
     private var totalValue: Double {
-        switch timePeriod {
-        case .day: return 3977
-        case .week: return 6257
-        case .month: return 6725
-        case .sixMonths: return 6567
-        case .year: return 6007
+        guard timePeriod == .day else { return summaryValue }
+        switch activityType {
+        case .steps:
+            return todayMetrics.steps
+        case .exercise:
+            return todayMetrics.exerciseMinutes
+        case .stand:
+            return todayMetrics.standMinutes
         }
     }
     
     private var dateRangeDescription: String {
-        let formatter = DateFormatter()
+        timePeriod.staticRangeDescription()
+    }
+
+    @MainActor
+    private func loadHealthKitData() async {
+        let config = queryConfig(for: timePeriod)
         let calendar = Calendar.current
-        let today = Date()
-        
+        let granularity = bucketGranularity(for: timePeriod)
+
+        do {
+            let valuesByDate = try await HealthKitService.shared.fetchActivityValues(
+                identifier: activityType.hkIdentifier,
+                unit: activityType.hkUnit,
+                from: config.startDate,
+                to: config.queryEndDate,
+                interval: config.interval,
+                anchorDate: config.anchorDate
+            )
+
+            let points = config.buckets.map { bucket in
+                let value = valuesByDate.first {
+                    calendar.isDate($0.key, equalTo: bucket.date, toGranularity: granularity)
+                }?.value ?? 0
+                return (day: bucket.label, value: value)
+            }
+
+            chartData = points
+            summaryValue = summaryValueFromChart(points, config: config)
+        } catch {
+            chartData = fallbackBuckets(for: timePeriod)
+            summaryValue = 0
+        }
+    }
+
+    private func bucketGranularity(for period: TimePeriod) -> Calendar.Component {
+        switch period {
+        case .day:
+            return .hour
+        case .week, .month:
+            return .day
+        case .sixMonths, .year:
+            return .month
+        }
+    }
+
+    private func summaryValueFromChart(_ points: [(day: String, value: Double?)], config: TimePeriodChartConfig) -> Double {
+        let values = points.compactMap(\.value)
+        guard !values.isEmpty else { return 0 }
+        let elapsedBucketCount = min(config.elapsedBucketCount(asOf: Date()), values.count)
+        let elapsedValues = Array(values.prefix(elapsedBucketCount))
+        guard !elapsedValues.isEmpty else { return 0 }
+
         switch timePeriod {
         case .day:
-            formatter.dateFormat = "EEEE"
-            let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
-            return formatter.string(from: yesterday)
-            
-        case .week:
-            formatter.dateFormat = "MMM d"
-            let weekStart = calendar.date(byAdding: .day, value: -6, to: today)!
-            return "\(formatter.string(from: weekStart))–\(formatter.string(from: today)), \(calendar.component(.year, from: today))"
-            
-        case .month:
-            formatter.dateFormat = "MMM d"
-            let monthStart = calendar.date(byAdding: .day, value: -30, to: today)!
-            return "\(formatter.string(from: monthStart))–\(formatter.string(from: today)), \(calendar.component(.year, from: today))"
-            
-        case .sixMonths:
-            formatter.dateFormat = "MMM d, yyyy"
-            let sixMonthsStart = calendar.date(byAdding: .month, value: -6, to: today)!
-            return "\(formatter.string(from: sixMonthsStart))–\(formatter.string(from: today))"
-            
-        case .year:
-            formatter.dateFormat = "MMM yyyy"
-            let yearStart = calendar.date(byAdding: .year, value: -1, to: today)!
-            return "\(formatter.string(from: yearStart))–\(formatter.string(from: today))"
+            return values.reduce(0, +)
+        case .week, .month:
+            return elapsedValues.reduce(0, +) / Double(elapsedValues.count)
+        case .sixMonths, .year:
+            let dayCount = config.elapsedDayCount(asOf: Date())
+            return elapsedValues.reduce(0, +) / Double(dayCount)
         }
+    }
+
+    private func fallbackBuckets(for period: TimePeriod) -> [(day: String, value: Double?)] {
+        queryConfig(for: period).buckets.map { ($0.label, nil) }
+    }
+
+    private func queryConfig(for period: TimePeriod) -> TimePeriodChartConfig {
+        period.staticChartConfig()
     }
 }
 

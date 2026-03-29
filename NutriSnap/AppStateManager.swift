@@ -54,6 +54,7 @@ final class AppStateManager {
             if let remoteID = user.remoteID {
                 try await syncService.initialSync(for: remoteID, modelContext: modelContext)
             }
+            FoodLogImageStore.shared.reconcileStorage(modelContext: modelContext)
             appState = .authenticated
 
         } catch APIError.unauthenticated {
@@ -131,9 +132,11 @@ final class AppStateManager {
     /// Triggered by scenePhase becoming .active in DashboardView.
     /// Retries all dirty records and pulls a lightweight cloud refresh.
     func handleForegroundActivation(modelContext: ModelContext) async {
-        guard let remoteID = currentUser?.remoteID,
-              let token = keychainManager.retrieveToken() else { return }
-        try? await syncService.flushPendingSync(for: remoteID, token: token, modelContext: modelContext)
+        if let remoteID = currentUser?.remoteID,
+           let token = keychainManager.retrieveToken() {
+            try? await syncService.flushPendingSync(for: remoteID, token: token, modelContext: modelContext)
+        }
+        FoodLogImageStore.shared.reconcileStorage(modelContext: modelContext)
     }
 
     /// Called from ProfileView. Clears Google session, JWT, and local user reference.

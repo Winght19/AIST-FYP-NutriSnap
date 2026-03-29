@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftData
 
 struct NutrientsDetailView: View {
+    @Environment(AppStateManager.self) private var appStateManager
     @Environment(\.dismiss) var dismiss
     @Query private var logs: [FoodLog]
     @State private var selectedDate = Date()
@@ -19,12 +20,16 @@ struct NutrientsDetailView: View {
         logsForSelectedDate.reduce(0) { $0 + $1[keyPath: keyPath] }
     }
 
+    private var nutritionGoals: NutritionGoals {
+        NutritionGoals(user: appStateManager.currentUser)
+    }
+
     private var nutrients: [Nutrient] {
         [
-            Nutrient(id: 1008, name: "Calories", unit: "kcal", target: 2000, current: sum(\.Calories)),
-            Nutrient(id: 1003, name: "Protein", unit: "g", target: 56, current: sum(\.Protein)),
-            Nutrient(id: 1005, name: "Carbohydrate", unit: "g", target: 130, current: sum(\.Carbohydrate)),
-            Nutrient(id: 1004, name: "Fat", unit: "g", target: 80, current: sum(\.Fat))
+            Nutrient(id: 1008, name: "Calories", unit: "kcal", target: nutritionGoals.calories, current: sum(\.Calories)),
+            Nutrient(id: 1003, name: "Protein", unit: "g", target: nutritionGoals.protein, current: sum(\.Protein)),
+            Nutrient(id: 1005, name: "Carbohydrate", unit: "g", target: nutritionGoals.carbs, current: sum(\.Carbohydrate)),
+            Nutrient(id: 1004, name: "Fat", unit: "g", target: nutritionGoals.fat, current: sum(\.Fat))
         ]
     }
     
@@ -177,6 +182,20 @@ struct Nutrient: Identifiable {
         } else {
             return String(format: "%.1f", current)
         }
+    }
+}
+
+struct NutritionGoals {
+    let calories: Double
+    let protein: Double
+    let carbs: Double
+    let fat: Double
+
+    init(user: User?) {
+        calories = user?.dailyCalorieGoal ?? 2000
+        protein = user?.proteinGoal ?? 150
+        carbs = user?.carbsGoal ?? 250
+        fat = user?.fatGoal ?? 70
     }
 }
 

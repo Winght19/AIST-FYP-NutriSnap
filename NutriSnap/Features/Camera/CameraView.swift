@@ -221,15 +221,9 @@ struct CameraView: View {
                             capturedImage: capturedImage,
                             baseNutrition: nutrition,
                             onSave: { finalNutrition, servings, editedName, savedDate, mealType in
-                                // Save image to Documents directory
                                 var savedImagePath: String? = nil
-                                if let image = capturedImage,
-                                   let data = image.jpegData(compressionQuality: 0.8) {
-                                    let fileName = UUID().uuidString + ".jpg"
-                                    let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                                        .appendingPathComponent(fileName)
-                                    try? data.write(to: url)
-                                    savedImagePath = url.path
+                                if let image = capturedImage {
+                                    savedImagePath = try? FoodLogImageStore.shared.save(image)
                                 }
                                 let log = FoodLog(
                                     name: editedName,
@@ -243,6 +237,7 @@ struct CameraView: View {
                                     mass: finalNutrition.mass
                                 )
                                 modelContext.insert(log)
+                                try? modelContext.save()
                                 pipeline.reset()
                                 nutritionPipeline.reset()
                                 capturedImage = nil

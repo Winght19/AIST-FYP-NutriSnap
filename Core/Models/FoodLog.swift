@@ -67,7 +67,6 @@ final class FoodLog {
         mass: Double = 0
     ) {
         // IDs and Syncing
-        self.id = UUID()
         self.remoteID = nil
         self.needsSync = true
         self.lastModifiedAt = Date()

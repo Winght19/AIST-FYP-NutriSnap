@@ -101,17 +101,18 @@ struct DashboardView: View {
 // 2. THE HOME SCREEN (Header + Rings + Meals)
 struct HomeView: View {
     @Environment(AppStateManager.self) private var appStateManager
+    @Environment(\.scenePhase) private var scenePhase
     @Query private var logs: [FoodLog]
     @State private var currentPage = 0 // For tracking the current slide in the carousel
+    @State private var healthMetrics = HealthDashboardMetrics.empty
     @Binding var selectedTab: Int
-
-    private let targetCalories: Double = 2650
-    private let targetCarbs: Double = 330
-    private let targetProtein: Double = 132
-    private let targetFat: Double = 80
 
     private var calendar: Calendar {
         Calendar.current
+    }
+
+    private var nutritionGoals: NutritionGoals {
+        NutritionGoals(user: appStateManager.currentUser)
     }
 
     private var todayLogs: [FoodLog] {
@@ -132,6 +133,10 @@ struct HomeView: View {
 
     private var todayFat: Double {
         todayLogs.reduce(0) { $0 + $1.Fat }
+    }
+
+    private var burnedCalories: Double {
+        healthMetrics.activeEnergyBurned
     }
 
     private var mealCaloriesToday: [MealCalories] {
@@ -199,22 +204,26 @@ struct HomeView: View {
                             NavigationLink(destination: NutrientsDetailView()) {
                                 NutritionSlide(
                                     currentCal: todayCalories,
-                                    targetCal: targetCalories,
+                                    targetCal: nutritionGoals.calories,
+                                    burnedCal: burnedCalories,
                                     currentCarbs: todayCarbs,
-                                    targetCarbs: targetCarbs,
+                                    targetCarbs: nutritionGoals.carbs,
                                     currentProtein: todayProtein,
-                                    targetProtein: targetProtein,
+                                    targetProtein: nutritionGoals.protein,
                                     currentFat: todayFat,
-                                    targetFat: targetFat
+                                    targetFat: nutritionGoals.fat
                                 )
                             }
                             .buttonStyle(PlainButtonStyle())
                             .tag(0)
                             
-                            ActivitiesCard()
+                            ActivitiesCard(metrics: healthMetrics)
                                 .tag(1)
-                            SleepCard()
-                                .tag(2)
+                            NavigationLink(destination: SleepDetailView(initialSleep: healthMetrics.sleep)) {
+                                SleepCard(metrics: healthMetrics.sleep)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .tag(2)
                         }
                         .tabViewStyle(.page(indexDisplayMode: .never)) 
                         .frame(height: geometry.size.height * 0.35)
@@ -251,7 +260,7 @@ struct HomeView: View {
                     }
                     Spacer()
                     VStack(alignment: .trailing) {
-                        Text("425")
+                        Text("\(Int(burnedCalories.rounded()))")
                             .font(.title3)
                             .fontWeight(.bold)
                         Text("cal burned")
@@ -299,6 +308,15 @@ struct HomeView: View {
             .padding(.top)
         }
         .background(Color(UIColor.systemGroupedBackground))
+        .task {
+            await refreshHealthMetrics()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            guard newPhase == .active else { return }
+            Task {
+                await refreshHealthMetrics()
+            }
+        }
         .safeAreaInset(edge: .top) {
             HStack {
                 VStack(alignment: .leading) {
@@ -323,6 +341,15 @@ struct HomeView: View {
             .background(.ultraThinMaterial) 
             // .background(.white.opacity(0.8)) // Option B: If you prefer simple fade
         }
+        }
+    }
+
+    @MainActor
+    private func refreshHealthMetrics() async {
+        do {
+            healthMetrics = try await HealthKitService.shared.fetchDashboardMetrics()
+        } catch {
+            healthMetrics = .empty
         }
     }
 }
@@ -461,6 +488,7 @@ struct WeeklyNutritionChartCard: View {
 struct NutritionSlide: View {
     let currentCal: Double
     let targetCal: Double
+    let burnedCal: Double
     let currentCarbs: Double
     let targetCarbs: Double
     let currentProtein: Double
@@ -475,7 +503,7 @@ struct NutritionSlide: View {
     }
     
     var remaining: Double {
-        return max(targetCal - currentCal + 425, 0) // target - eaten + burned
+        return max(targetCal - currentCal + burnedCal, 0) // target - eaten + burned
     }
     
     var body: some View {
@@ -521,7 +549,7 @@ struct NutritionSlide: View {
                                 .font(UIScreen.isSmallDevice ? .callout : .body)
                                 .foregroundStyle(.orange)
                             
-                                Text("425")
+                                Text("\(Int(burnedCal.rounded()))")
                                     .font(UIScreen.isSmallDevice ? .title3 : .title2)
                                     .fontWeight(.bold)
                                     .minimumScaleFactor(0.6)
@@ -635,8 +663,10 @@ struct MacroBar: View {
 
 // --- SLIDE 2: ACTIVITIES (Steps, Exercise, Stand) ---
 struct ActivitiesCard: View {
+    let metrics: HealthDashboardMetrics
+
     var body: some View {
-        NavigationLink(destination: ActivityDetailView()) {
+        NavigationLink(destination: ActivityDetailView(initialMetrics: metrics)) {
             ZStack(alignment: .topLeading) {
                 VStack(alignment: .leading, spacing: UIScreen.isSmallDevice ? 8 : 12) {
                     // Spacer for title
@@ -644,18 +674,18 @@ struct ActivitiesCard: View {
                         .frame(height: UIScreen.isSmallDevice ? 30 : 40)
                     
                     VStack(spacing: UIScreen.isSmallDevice ? 12 : 20) {
-                    ActivityRow(label: "Steps", current: 6000, target: 10000, unit: "steps", color: .red)
-                    ActivityRow(label: "Exercise", current: 20, target: 30, unit: "mins", color: .green)
-                    ActivityRow(label: "Stand", current: 110, target: 120, unit: "mins", color: .blue)
+                        ActivityRow(label: "Steps", current: metrics.steps, target: 10000, unit: "steps", color: .red)
+                        ActivityRow(label: "Exercise", current: metrics.exerciseMinutes, target: 30, unit: "mins", color: .green)
+                        ActivityRow(label: "Stand", current: metrics.standMinutes, target: 120, unit: "mins", color: .blue)
+                    }
+                    .padding(.horizontal, UIScreen.isSmallDevice ? 12 : 16)
+                    .padding(.bottom, UIScreen.isSmallDevice ? 8 : 12)
                 }
-                .padding(.horizontal, UIScreen.isSmallDevice ? 12 : 16)
-                .padding(.bottom, UIScreen.isSmallDevice ? 8 : 12)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Color(uiColor: .secondarySystemGroupedBackground))
-            .cornerRadius(16)
-            .shadow(color: Color(uiColor: .label).opacity(0.05), radius: 5, x: 0, y: 2)
-            .padding(.horizontal)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(uiColor: .secondarySystemGroupedBackground))
+                .cornerRadius(16)
+                .shadow(color: Color(uiColor: .label).opacity(0.05), radius: 5, x: 0, y: 2)
+                .padding(.horizontal)
             
             // Title overlay
             Text("Activities")
@@ -713,11 +743,30 @@ struct ActivityRow: View {
 
 // --- SLIDE 3: SLEEP (Donut Chart) ---
 struct SleepCard: View {
+    let metrics: SleepBreakdown
+
     @ScaledMetric(relativeTo: .body) private var scaledDonutSize: CGFloat = UIScreen.isSmallDevice ? 100 : 120
     @ScaledMetric(relativeTo: .body) private var donutLineWidth: CGFloat = UIScreen.isSmallDevice ? 10 : 12
     
     private var donutSize: CGFloat {
         UIScreen.isSmallDevice ? max(scaledDonutSize, 80) : max(scaledDonutSize, 90)
+    }
+
+    private var sleepSegments: [(color: Color, value: Double)] {
+        [
+            (.orange, metrics.awakeMinutes),
+            (.cyan, metrics.remMinutes),
+            (.blue, metrics.coreMinutes),
+            (.indigo, metrics.deepMinutes)
+        ]
+    }
+
+    private var totalChartMinutes: Double {
+        max(sleepSegments.reduce(0) { $0 + $1.value }, 1)
+    }
+
+    private var totalSleepText: String {
+        formatDuration(minutes: metrics.totalMinutes)
     }
     
     var body: some View {
@@ -731,14 +780,18 @@ struct SleepCard: View {
                 // Donut Chart
                 Spacer()
                 ZStack {
-                    TrimmedCircle(start: 0.0, end: 0.05, color: .orange, lineWidth: donutLineWidth)
-                    TrimmedCircle(start: 0.05, end: 0.28, color: .cyan, lineWidth: donutLineWidth)
-                    TrimmedCircle(start: 0.28, end: 0.70, color: .blue, lineWidth: donutLineWidth)
-                    TrimmedCircle(start: 0.70, end: 1.0, color: .indigo, lineWidth: donutLineWidth)
+                    ForEach(Array(sleepSegments.enumerated()), id: \.offset) { index, segment in
+                        TrimmedCircle(
+                            start: segmentStart(index: index),
+                            end: segmentEnd(index: index),
+                            color: segment.color,
+                            lineWidth: donutLineWidth
+                        )
+                    }
                     VStack(spacing: 2) {
                         Image(systemName: "moon.fill")
                             .font(UIScreen.isSmallDevice ? .body : .title3)
-                        Text("5h 44min")
+                        Text(totalSleepText)
                             .font(UIScreen.isSmallDevice ? .callout : .body)
                             .fontWeight(.bold)
                             .minimumScaleFactor(0.5)
@@ -752,10 +805,10 @@ struct SleepCard: View {
                 
                 // Legend
                 VStack(alignment: .leading, spacing: UIScreen.isSmallDevice ? 8 : 12) {
-                    LegendItem(color: .orange, label: "Awake", value: "0h 17min")
-                    LegendItem(color: .cyan, label: "REM", value: "1h 35min")
-                    LegendItem(color: .blue, label: "Core", value: "4h 6min")
-                    LegendItem(color: .indigo, label: "Deep", value: "1h 0min")
+                    LegendItem(color: .orange, label: "Awake", value: formatDuration(minutes: metrics.awakeMinutes))
+                    LegendItem(color: .cyan, label: "REM", value: formatDuration(minutes: metrics.remMinutes))
+                    LegendItem(color: .blue, label: "Core", value: formatDuration(minutes: metrics.coreMinutes))
+                    LegendItem(color: .indigo, label: "Deep", value: formatDuration(minutes: metrics.deepMinutes))
                 }
                 Spacer()
             }
@@ -777,6 +830,24 @@ struct SleepCard: View {
             .padding(.horizontal, 32)
             .padding(.top, 16)
         }
+    }
+
+    private func segmentStart(index: Int) -> CGFloat {
+        guard index > 0 else { return 0 }
+        let consumed = sleepSegments[..<index].reduce(0) { $0 + $1.value }
+        return CGFloat(consumed / totalChartMinutes)
+    }
+
+    private func segmentEnd(index: Int) -> CGFloat {
+        let consumed = sleepSegments[...index].reduce(0) { $0 + $1.value }
+        return CGFloat(consumed / totalChartMinutes)
+    }
+
+    private func formatDuration(minutes: Double) -> String {
+        let roundedMinutes = max(Int(minutes.rounded()), 0)
+        let hours = roundedMinutes / 60
+        let mins = roundedMinutes % 60
+        return "\(hours)h \(mins)min"
     }
 }
 
