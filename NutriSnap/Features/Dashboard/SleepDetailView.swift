@@ -4,6 +4,7 @@ struct SleepDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedTimePeriod: TimePeriod = .day
+    @State private var selectedReferenceDate = Date()
     @State private var sleepMetrics: SleepBreakdown
 
     private let sleepGoalMinutes: Double = 8 * 60
@@ -84,7 +85,7 @@ struct SleepDetailView: View {
 
                         SleepTrendView(
                             timePeriod: selectedTimePeriod,
-                            todayMetrics: sleepMetrics
+                            referenceDate: $selectedReferenceDate
                         )
                         .padding(.horizontal)
 
@@ -104,6 +105,9 @@ struct SleepDetailView: View {
             Task {
                 await refreshSleepMetrics()
             }
+        }
+        .onChange(of: selectedTimePeriod) { _, newPeriod in
+            selectedReferenceDate = newPeriod.canonicalReferenceDate(for: min(selectedReferenceDate, Date()))
         }
     }
 
@@ -241,11 +245,10 @@ private struct SleepStatTile: View {
 
 private struct SleepTrendView: View {
     let timePeriod: TimePeriod
-    let todayMetrics: SleepBreakdown
+    @Binding var referenceDate: Date
 
     @State private var chartData: [(day: String, value: Double?)] = []
     @State private var summaryValue: Double = 0
-    @State private var dateRangeDescription: String = "Last Night"
 
     private var maxValue: Double {
         max(chartData.compactMap(\.value).max() ?? 0, timePeriod == .day ? 60 : 1)
@@ -260,7 +263,11 @@ private struct SleepTrendView: View {
     }
 
     private var totalValue: Double {
-        timePeriod == .day ? max(summaryValue, todayMetrics.totalMinutes) : summaryValue
+        summaryValue
+    }
+
+    private var chartTaskID: String {
+        "\(timePeriod.title)-\(timePeriod.canonicalReferenceDate(for: referenceDate).timeIntervalSince1970)"
     }
 
     var body: some View {
@@ -277,9 +284,7 @@ private struct SleepTrendView: View {
                     .minimumScaleFactor(0.6)
                     .lineLimit(1)
 
-                Text(dateRangeDescription)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                PeriodSelectionRow(timePeriod: timePeriod, referenceDate: $referenceDate)
             }
 
             GeometryReader { geometry in
@@ -337,7 +342,7 @@ private struct SleepTrendView: View {
         .padding()
         .background(Color(uiColor: .systemBackground))
         .cornerRadius(16)
-        .task(id: timePeriod.title) {
+        .task(id: chartTaskID) {
             await loadSleepData()
         }
     }
@@ -360,8 +365,8 @@ private struct SleepTrendView: View {
         do {
             switch timePeriod {
             case .day:
-                let config = timePeriod.staticChartConfig()
-                let hourlyValues = try await HealthKitService.shared.fetchHourlySleepValues(referenceDate: Date())
+                let config = timePeriod.staticChartConfig(referenceDate: referenceDate)
+                let hourlyValues = try await HealthKitService.shared.fetchHourlySleepValues(referenceDate: referenceDate)
                 let sortedEntries = hourlyValues.sorted { $0.key < $1.key }
                 let valuesByHour = sortedEntries.reduce(into: [Int: Double]()) { partial, entry in
                     let hour = calendar.component(.hour, from: entry.key)
@@ -369,20 +374,18 @@ private struct SleepTrendView: View {
                 }
 
                 if sortedEntries.isEmpty {
-                    chartData = fallbackDayBuckets()
+                    chartData = fallbackDayBuckets(for: referenceDate)
                     summaryValue = 0
-                    dateRangeDescription = "Last Night"
                 } else {
                     chartData = config.buckets.map { bucket in
                         let hour = calendar.component(.hour, from: bucket.date)
                         return (day: bucket.label, value: valuesByHour[hour] ?? 0)
                     }
                     summaryValue = sortedEntries.reduce(0) { $0 + $1.value }
-                    dateRangeDescription = sleepDayDescription(for: sortedEntries.map(\.key))
                 }
 
             case .week, .month:
-                let config = sleepRangeConfig(for: timePeriod)
+                let config = sleepRangeConfig(for: timePeriod, referenceDate: referenceDate)
                 let dailyValues = try await HealthKitService.shared.fetchSleepTotalsByDay(
                     from: config.startDate,
                     to: config.displayEndDate
@@ -392,10 +395,9 @@ private struct SleepTrendView: View {
                     (day: bucket.label, value: dailyValues[bucket.date] ?? 0)
                 }
                 summaryValue = average(from: chartData, config: config)
-                dateRangeDescription = rangeDescription(for: timePeriod)
 
             case .sixMonths, .year:
-                let config = sleepRangeConfig(for: timePeriod)
+                let config = sleepRangeConfig(for: timePeriod, referenceDate: referenceDate)
                 let dailyValues = try await HealthKitService.shared.fetchSleepTotalsByDay(
                     from: config.startDate,
                     to: config.displayEndDate
@@ -411,12 +413,10 @@ private struct SleepTrendView: View {
                     return (day: bucket.label, value: averageValue)
                 }
                 summaryValue = dailyAverage(from: dailyValues, config: config)
-                dateRangeDescription = rangeDescription(for: timePeriod)
             }
         } catch {
             chartData = fallbackBuckets(for: timePeriod)
             summaryValue = 0
-            dateRangeDescription = timePeriod == .day ? "Last Night" : rangeDescription(for: timePeriod)
         }
     }
 
@@ -443,35 +443,18 @@ private struct SleepTrendView: View {
     private func fallbackBuckets(for period: TimePeriod) -> [(day: String, value: Double?)] {
         switch period {
         case .day:
-            return fallbackDayBuckets()
+            return fallbackDayBuckets(for: referenceDate)
         case .week, .month, .sixMonths, .year:
-            return sleepRangeConfig(for: period).buckets.map { ($0.label, nil) }
+            return sleepRangeConfig(for: period, referenceDate: referenceDate).buckets.map { ($0.label, nil) }
         }
     }
 
-    private func fallbackDayBuckets() -> [(day: String, value: Double?)] {
-        TimePeriod.day.staticChartConfig().buckets.map { ($0.label, nil) }
+    private func fallbackDayBuckets(for referenceDate: Date) -> [(day: String, value: Double?)] {
+        TimePeriod.day.staticChartConfig(referenceDate: referenceDate).buckets.map { ($0.label, nil) }
     }
 
-    private func sleepDayDescription(for dates: [Date]) -> String {
-        guard let first = dates.first, let last = dates.last else { return "Last Night" }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d, HH:mm"
-        let endDate = Calendar.current.date(byAdding: .hour, value: 1, to: last) ?? last
-        return "\(formatter.string(from: first))–\(formatter.string(from: endDate))"
-    }
-
-    private func rangeDescription(for period: TimePeriod) -> String {
-        switch period {
-        case .day:
-            return "Last Night"
-        case .week, .month, .sixMonths, .year:
-            return period.staticRangeDescription()
-        }
-    }
-
-    private func sleepRangeConfig(for period: TimePeriod) -> TimePeriodChartConfig {
-        period.staticChartConfig()
+    private func sleepRangeConfig(for period: TimePeriod, referenceDate: Date) -> TimePeriodChartConfig {
+        period.staticChartConfig(referenceDate: referenceDate)
     }
 
     private func formatDuration(minutes: Double) -> String {

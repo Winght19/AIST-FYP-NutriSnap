@@ -6,6 +6,7 @@ struct ActivityDetailView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedActivityType: ActivityType = .exercise
     @State private var selectedTimePeriod: TimePeriod = .day
+    @State private var selectedReferenceDate = Date()
     @State private var dashboardMetrics = HealthDashboardMetrics.empty
 
     init(initialMetrics: HealthDashboardMetrics = .empty) {
@@ -80,7 +81,7 @@ struct ActivityDetailView: View {
                         ExerciseTrendView(
                             timePeriod: selectedTimePeriod,
                             activityType: selectedActivityType,
-                            todayMetrics: dashboardMetrics
+                            referenceDate: $selectedReferenceDate
                         )
                             .padding(.horizontal)
                     }
@@ -105,6 +106,9 @@ struct ActivityDetailView: View {
                     dashboardMetrics = .empty
                 }
             }
+        }
+        .onChange(of: selectedTimePeriod) { _, newPeriod in
+            selectedReferenceDate = newPeriod.canonicalReferenceDate(for: min(selectedReferenceDate, Date()))
         }
     }
 }
@@ -178,6 +182,78 @@ enum TimePeriod {
         case .month: return "M"
         case .sixMonths: return "6M"
         case .year: return "Y"
+        }
+    }
+}
+
+extension TimePeriod {
+    func canonicalReferenceDate(for date: Date, calendar: Calendar = .current) -> Date {
+        switch self {
+        case .day:
+            return calendar.startOfDay(for: date)
+        case .week:
+            return calendar.mondayStartOfWeek(containing: date)
+        case .month:
+            let components = calendar.dateComponents([.year, .month], from: date)
+            return calendar.date(from: components) ?? calendar.startOfDay(for: date)
+        case .sixMonths:
+            let year = calendar.component(.year, from: date)
+            let month = calendar.component(.month, from: date)
+            let startMonth = month <= 6 ? 1 : 7
+            return calendar.date(from: DateComponents(year: year, month: startMonth, day: 1)) ?? calendar.startOfDay(for: date)
+        case .year:
+            let year = calendar.component(.year, from: date)
+            return calendar.date(from: DateComponents(year: year, month: 1, day: 1)) ?? calendar.startOfDay(for: date)
+        }
+    }
+
+    func latestSelectableReferenceDate(now: Date = Date(), calendar: Calendar = .current) -> Date {
+        canonicalReferenceDate(for: now, calendar: calendar)
+    }
+
+    func shiftedReferenceDate(from referenceDate: Date, by value: Int, calendar: Calendar = .current) -> Date {
+        let baseDate = canonicalReferenceDate(for: referenceDate, calendar: calendar)
+
+        switch self {
+        case .day:
+            return calendar.date(byAdding: .day, value: value, to: baseDate) ?? baseDate
+        case .week:
+            return calendar.date(byAdding: .day, value: value * 7, to: baseDate) ?? baseDate
+        case .month:
+            return calendar.date(byAdding: .month, value: value, to: baseDate) ?? baseDate
+        case .sixMonths:
+            return calendar.date(byAdding: .month, value: value * 6, to: baseDate) ?? baseDate
+        case .year:
+            return calendar.date(byAdding: .year, value: value, to: baseDate) ?? baseDate
+        }
+    }
+
+    func selectionLabel(referenceDate: Date, calendar: Calendar = .current) -> String {
+        let normalizedDate = canonicalReferenceDate(for: referenceDate, calendar: calendar)
+        let config = staticChartConfig(referenceDate: normalizedDate, calendar: calendar)
+
+        switch self {
+        case .day:
+            return normalizedDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day())
+        case .week:
+            let startLabel = config.startDate.formatted(.dateTime.month(.abbreviated).day())
+            let endLabel: String
+
+            if calendar.isDate(config.startDate, equalTo: config.displayEndDate, toGranularity: .month) {
+                endLabel = config.displayEndDate.formatted(.dateTime.day())
+            } else {
+                endLabel = config.displayEndDate.formatted(.dateTime.month(.abbreviated).day())
+            }
+
+            return "\(startLabel)-\(endLabel)"
+        case .month:
+            return normalizedDate.formatted(.dateTime.month(.wide).year())
+        case .sixMonths:
+            let startMonth = calendar.component(.month, from: config.startDate)
+            let year = calendar.component(.year, from: config.startDate)
+            return startMonth <= 6 ? "Jan-Jun \(year)" : "Jul-Dec \(year)"
+        case .year:
+            return "\(calendar.component(.year, from: normalizedDate))"
         }
     }
 }
@@ -480,11 +556,267 @@ struct TimePeriodSelector: View {
     }
 }
 
+struct PeriodSelectionRow: View {
+    let timePeriod: TimePeriod
+    @Binding var referenceDate: Date
+
+    @State private var isShowingPicker = false
+
+    private var latestReferenceDate: Date {
+        timePeriod.latestSelectableReferenceDate()
+    }
+
+    private var canMoveForward: Bool {
+        timePeriod.shiftedReferenceDate(from: referenceDate, by: 1) <= latestReferenceDate
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button(action: { shift(by: -1) }) {
+                Image(systemName: "chevron.left")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
+
+            Button(action: { isShowingPicker = true }) {
+                Text(timePeriod.selectionLabel(referenceDate: referenceDate))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .buttonStyle(.plain)
+
+            Button(action: { shift(by: 1) }) {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .opacity(canMoveForward ? 1 : 0.35)
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.plain)
+            .disabled(!canMoveForward)
+        }
+        .sheet(isPresented: $isShowingPicker) {
+            PeriodSelectionSheet(timePeriod: timePeriod, referenceDate: $referenceDate)
+        }
+    }
+
+    private func shift(by value: Int) {
+        let shiftedDate = timePeriod.shiftedReferenceDate(from: referenceDate, by: value)
+        referenceDate = min(shiftedDate, latestReferenceDate)
+    }
+}
+
+private enum HalfYearSelection: Int, CaseIterable, Identifiable {
+    case first
+    case second
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .first:
+            return "Jan-Jun"
+        case .second:
+            return "Jul-Dec"
+        }
+    }
+
+    var startMonth: Int {
+        switch self {
+        case .first:
+            return 1
+        case .second:
+            return 7
+        }
+    }
+}
+
+struct PeriodSelectionSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let timePeriod: TimePeriod
+    @Binding var referenceDate: Date
+
+    @State private var tempDate: Date
+    @State private var tempMonth: Int
+    @State private var tempYear: Int
+    @State private var tempHalfYear: HalfYearSelection
+
+    private let calendar = Calendar.current
+    private let currentDate = Date()
+
+    init(timePeriod: TimePeriod, referenceDate: Binding<Date>) {
+        self.timePeriod = timePeriod
+        _referenceDate = referenceDate
+
+        let normalizedDate = timePeriod.canonicalReferenceDate(for: referenceDate.wrappedValue)
+        let month = Calendar.current.component(.month, from: normalizedDate)
+
+        _tempDate = State(initialValue: normalizedDate)
+        _tempMonth = State(initialValue: month)
+        _tempYear = State(initialValue: Calendar.current.component(.year, from: normalizedDate))
+        _tempHalfYear = State(initialValue: month <= 6 ? .first : .second)
+    }
+
+    private var currentYear: Int {
+        calendar.component(.year, from: currentDate)
+    }
+
+    private var availableYears: [Int] {
+        Array((1900...currentYear).reversed())
+    }
+
+    private var availableMonths: [Int] {
+        if tempYear == currentYear {
+            return Array(1...calendar.component(.month, from: currentDate))
+        }
+        return Array(1...12)
+    }
+
+    private var availableHalfYears: [HalfYearSelection] {
+        if tempYear < currentYear {
+            return HalfYearSelection.allCases
+        }
+
+        return calendar.component(.month, from: currentDate) <= 6 ? [.first] : HalfYearSelection.allCases
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack {
+                switch timePeriod {
+                case .day, .week:
+                    DatePicker(
+                        "",
+                        selection: $tempDate,
+                        in: ...currentDate,
+                        displayedComponents: .date
+                    )
+                    .datePickerStyle(.graphical)
+                    .labelsHidden()
+                    .padding()
+
+                case .month:
+                    HStack(spacing: 0) {
+                        Picker("Month", selection: $tempMonth) {
+                            ForEach(availableMonths, id: \.self) { month in
+                                Text(calendar.monthSymbols[month - 1]).tag(month)
+                            }
+                        }
+                        .pickerStyle(.wheel)
+                        .frame(maxWidth: .infinity)
+
+                        Picker("Year", selection: $tempYear) {
+                            ForEach(availableYears, id: \.self) { year in
+                                Text("\(year)").tag(year)
+                            }
+                        }
+                        .pickerStyle(.wheel)
+                        .frame(maxWidth: .infinity)
+                    }
+                    .padding(.horizontal)
+
+                case .sixMonths:
+                    VStack(spacing: 20) {
+                        Picker("Half", selection: $tempHalfYear) {
+                            ForEach(availableHalfYears) { half in
+                                Text(half.title).tag(half)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+
+                        Picker("Year", selection: $tempYear) {
+                            ForEach(availableYears, id: \.self) { year in
+                                Text("\(year)").tag(year)
+                            }
+                        }
+                        .pickerStyle(.wheel)
+                        .frame(maxWidth: .infinity)
+                    }
+                    .padding()
+
+                case .year:
+                    Picker("Year", selection: $tempYear) {
+                        ForEach(availableYears, id: \.self) { year in
+                            Text("\(year)").tag(year)
+                        }
+                    }
+                    .pickerStyle(.wheel)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                }
+
+                Spacer()
+            }
+            .navigationTitle(navigationTitle)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        referenceDate = selectedDateFromPicker()
+                        dismiss()
+                    }
+                }
+            }
+            .presentationDetents(timePeriod == .day || timePeriod == .week ? [.medium, .large] : [.medium])
+            .onChange(of: tempYear) { _, _ in
+                if !availableMonths.contains(tempMonth), let lastMonth = availableMonths.last {
+                    tempMonth = lastMonth
+                }
+                if !availableHalfYears.contains(tempHalfYear), let availableHalfYear = availableHalfYears.last {
+                    tempHalfYear = availableHalfYear
+                }
+            }
+        }
+    }
+
+    private var navigationTitle: String {
+        switch timePeriod {
+        case .day:
+            return "Select Date"
+        case .week:
+            return "Select Week"
+        case .month:
+            return "Select Month"
+        case .sixMonths:
+            return "Select Half-Year"
+        case .year:
+            return "Select Year"
+        }
+    }
+
+    private func selectedDateFromPicker() -> Date {
+        let selectedDate: Date
+
+        switch timePeriod {
+        case .day, .week:
+            selectedDate = tempDate
+        case .month:
+            selectedDate = calendar.date(from: DateComponents(year: tempYear, month: tempMonth, day: 1)) ?? currentDate
+        case .sixMonths:
+            selectedDate = calendar.date(from: DateComponents(year: tempYear, month: tempHalfYear.startMonth, day: 1)) ?? currentDate
+        case .year:
+            selectedDate = calendar.date(from: DateComponents(year: tempYear, month: 1, day: 1)) ?? currentDate
+        }
+
+        return timePeriod.canonicalReferenceDate(for: min(selectedDate, currentDate), calendar: calendar)
+    }
+}
+
 // MARK: - Exercise Trend View
 struct ExerciseTrendView: View {
     let timePeriod: TimePeriod
     let activityType: ActivityType
-    let todayMetrics: HealthDashboardMetrics
+    @Binding var referenceDate: Date
     @State private var chartData: [(day: String, value: Double?)] = []
     @State private var summaryValue: Double = 0
     
@@ -509,10 +841,8 @@ struct ExerciseTrendView: View {
                         .font(.title3)
                         .foregroundStyle(.secondary)
                 }
-                
-                Text(dateRangeDescription)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+
+                PeriodSelectionRow(timePeriod: timePeriod, referenceDate: $referenceDate)
             }
             
             // Bar Chart
@@ -571,7 +901,7 @@ struct ExerciseTrendView: View {
         .padding()
         .background(Color(uiColor: .systemBackground))
         .cornerRadius(16)
-        .task(id: "\(activityType.title)-\(timePeriod.title)") {
+        .task(id: chartTaskID) {
             await loadHealthKitData()
         }
     }
@@ -598,24 +928,16 @@ struct ExerciseTrendView: View {
     }
     
     private var totalValue: Double {
-        guard timePeriod == .day else { return summaryValue }
-        switch activityType {
-        case .steps:
-            return todayMetrics.steps
-        case .exercise:
-            return todayMetrics.exerciseMinutes
-        case .stand:
-            return todayMetrics.standMinutes
-        }
+        summaryValue
     }
-    
-    private var dateRangeDescription: String {
-        timePeriod.staticRangeDescription()
+
+    private var chartTaskID: String {
+        "\(activityType.title)-\(timePeriod.title)-\(timePeriod.canonicalReferenceDate(for: referenceDate).timeIntervalSince1970)"
     }
 
     @MainActor
     private func loadHealthKitData() async {
-        let config = queryConfig(for: timePeriod)
+        let config = queryConfig(for: timePeriod, referenceDate: referenceDate)
         let calendar = Calendar.current
         let granularity = bucketGranularity(for: timePeriod)
 
@@ -674,11 +996,11 @@ struct ExerciseTrendView: View {
     }
 
     private func fallbackBuckets(for period: TimePeriod) -> [(day: String, value: Double?)] {
-        queryConfig(for: period).buckets.map { ($0.label, nil) }
+        queryConfig(for: period, referenceDate: referenceDate).buckets.map { ($0.label, nil) }
     }
 
-    private func queryConfig(for period: TimePeriod) -> TimePeriodChartConfig {
-        period.staticChartConfig()
+    private func queryConfig(for period: TimePeriod, referenceDate: Date) -> TimePeriodChartConfig {
+        period.staticChartConfig(referenceDate: referenceDate)
     }
 }
 
