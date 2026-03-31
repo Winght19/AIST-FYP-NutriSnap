@@ -66,7 +66,7 @@ final class FoodLog {
         mealType: String = "Meal",
         mass: Double = 0
     ) {
-        // IDs and Syncing
+        // Syncing
         self.remoteID = nil
         self.needsSync = true
         self.lastModifiedAt = Date()

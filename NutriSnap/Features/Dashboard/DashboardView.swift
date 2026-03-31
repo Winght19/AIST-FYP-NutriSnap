@@ -217,20 +217,23 @@ struct HomeView: View {
                             .buttonStyle(PlainButtonStyle())
                             .tag(0)
                             
-                            ActivitiesCard(metrics: healthMetrics)
+                            WeightWidgetView()
                                 .tag(1)
+
+                            ActivitiesCard(metrics: healthMetrics)
+                                .tag(2)
                             NavigationLink(destination: SleepDetailView(initialSleep: healthMetrics.sleep)) {
                                 SleepCard(metrics: healthMetrics.sleep)
                             }
                             .buttonStyle(PlainButtonStyle())
-                            .tag(2)
+                                .tag(3)
                         }
                         .tabViewStyle(.page(indexDisplayMode: .never)) 
                         .frame(height: geometry.size.height * 0.35)
                         
                         // Custom page indicator below the cards
                         HStack(spacing: 8) {
-                            ForEach(0..<3) { index in
+                            ForEach(0..<4) { index in
                                 Circle()
                                     .fill(index == currentPage ? Color.gray : Color.gray.opacity(0.3))
                                     .frame(width: 8, height: 8)

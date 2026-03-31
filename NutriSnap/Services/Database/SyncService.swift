@@ -53,6 +53,29 @@ final class SyncService {
         }
     }
 
+    /// Deletes a FoodLog locally AND remotely.
+    /// Call this instead of `modelContext.delete` when syncing is enabled.
+    @MainActor
+    func deleteFoodLog(_ foodLog: FoodLog, modelContext: ModelContext) {
+        let remoteID = foodLog.remoteID          // capture before object is deleted
+        let token = keychainManager.retrieveToken()
+
+        // Remove from SwiftData immediately
+        modelContext.delete(foodLog)
+        try? modelContext.save()
+
+        // Fire background network DELETE if we have the remote ID
+        guard let remoteID, let token else { return }
+        Task {
+            do {
+                // PostgREST REST DELETE: /food_logs?remote_id=eq.{id}
+                try await apiClient.delete("/food_logs?remote_id=eq.\(remoteID)", token: token)
+            } catch {
+                print("⚠️ Remote delete failed for FoodLog \(remoteID): \(error.localizedDescription)")
+            }
+        }
+    }
+
     /// Attempts to push a single Meal to the cloud in the background.
     @MainActor
     func writeThrough(meal: Meal, modelContext: ModelContext) {
@@ -112,27 +135,62 @@ final class SyncService {
             }
         }
 
+        let dirtyWeightEntries = try modelContext.fetch(
+            FetchDescriptor<WeightEntry>(predicate: #Predicate { $0.needsSync == true })
+        )
+        for entry in dirtyWeightEntries where entry.user?.remoteID == userRemoteID {
+            do {
+                let dto = makeWeightEntryDTO(from: entry, userRemoteID: userRemoteID)
+                let saved: WeightEntryDTO = entry.remoteID == nil
+                    ? try await apiClient.post("/weight-entries", body: dto, token: token)
+                    : try await apiClient.put("/weight-entries/\(entry.remoteID!)", body: dto, token: token)
+                entry.remoteID = saved.remoteID
+                entry.needsSync = false
+            } catch {
+                // Leave needsSync = true.
+            }
+        }
+
         try? modelContext.save()
     }
 
     // MARK: - Pull (cloud → SwiftData)
 
-    /// Pulls FoodLog and Meal records for the past 30 days.
+    /// Pulls FoodLog, Meal, and WeightEntry records for the past 30 days.
     /// Uses last-write-wins: local record wins if its lastModifiedAt is newer.
     @MainActor
     private func pullRecentData(for userRemoteID: String, token: String, modelContext: ModelContext) async throws {
-        let remoteFoodLogs: [FoodLogDTO] = try await apiClient.get(
-            "/foodlogs?userId=\(userRemoteID)&days=30", token: token
-        )
-        for dto in remoteFoodLogs {
-            upsertFoodLog(from: dto, modelContext: modelContext)
+        do {
+            let remoteFoodLogs: [FoodLogDTO] = try await apiClient.get(
+                "/foodlogs?userId=\(userRemoteID)&days=30", token: token
+            )
+            for dto in remoteFoodLogs {
+                upsertFoodLog(from: dto, modelContext: modelContext)
+            }
+        } catch {
+            print("⚠️ Failed to pull FoodLogs: \(error.localizedDescription)")
         }
 
-        let remoteMeals: [MealDTO] = try await apiClient.get(
-            "/meals?userId=\(userRemoteID)&days=30", token: token
-        )
-        for dto in remoteMeals {
-            upsertMeal(from: dto, modelContext: modelContext)
+        do {
+            let remoteMeals: [MealDTO] = try await apiClient.get(
+                "/meals?userId=\(userRemoteID)&days=30", token: token
+            )
+            for dto in remoteMeals {
+                upsertMeal(from: dto, modelContext: modelContext)
+            }
+        } catch {
+            print("⚠️ Failed to pull Meals: \(error.localizedDescription)")
+        }
+
+        do {
+            let remoteWeightEntries: [WeightEntryDTO] = try await apiClient.get(
+                "/weight-entries?userId=\(userRemoteID)", token: token
+            )
+            for dto in remoteWeightEntries {
+                upsertWeightEntry(from: dto, modelContext: modelContext)
+            }
+        } catch {
+            print("⚠️ Failed to pull Weight Entries: \(error.localizedDescription)")
         }
 
         try? modelContext.save()
@@ -160,6 +218,9 @@ final class SyncService {
     private func applyFoodLogDTO(_ dto: FoodLogDTO, to log: FoodLog) {
         log.remoteID = dto.remoteID
         log.foodName = dto.foodName
+        log.mealType = dto.mealType ?? "snack"
+        log.mass = dto.mass ?? 100.0
+        log.imagePath = dto.imageUrl
         log.timestamp = dto.timestamp
         log.lastModifiedAt = dto.lastModifiedAt
         log.Calories = dto.calories
@@ -239,6 +300,9 @@ final class SyncService {
             remoteID: log.remoteID ?? "",
             userID: userRemoteID,
             foodName: log.foodName,
+            mealType: log.mealType,
+            mass: log.mass,
+            imageUrl: log.imagePath,
             timestamp: log.timestamp,
             lastModifiedAt: log.lastModifiedAt,
             calories: log.Calories,
@@ -309,4 +373,86 @@ final class SyncService {
             foods: foodItems
         )
     }
+
+    // MARK: - WeightEntry Write-Through
+
+    /// Attempts to push a single WeightEntry to the cloud in the background.
+    @MainActor
+    func writeThrough(weightEntry: WeightEntry, modelContext: ModelContext) {
+        guard let token = keychainManager.retrieveToken(),
+              let userRemoteID = weightEntry.user?.remoteID else { return }
+
+        Task {
+            do {
+                let dto = makeWeightEntryDTO(from: weightEntry, userRemoteID: userRemoteID)
+                let saved: WeightEntryDTO = weightEntry.remoteID == nil
+                    ? try await apiClient.post("/weight-entries", body: dto, token: token)
+                    : try await apiClient.put("/weight-entries/\(weightEntry.remoteID!)", body: dto, token: token)
+                weightEntry.remoteID = saved.remoteID
+                weightEntry.needsSync = false
+                try? modelContext.save()
+            } catch {
+                // Intentionally silent — needsSync stays true for the next flush pass.
+            }
+        }
+    }
+
+    // MARK: - WeightEntry Upsert
+
+    @MainActor
+    private func upsertWeightEntry(from dto: WeightEntryDTO, modelContext: ModelContext) {
+        let remoteID = dto.remoteID
+        let descriptor = FetchDescriptor<WeightEntry>(
+            predicate: #Predicate { $0.remoteID == remoteID }
+        )
+        if let existing = try? modelContext.fetch(descriptor).first {
+            if existing.lastModifiedAt >= dto.lastModifiedAt { return }
+            applyWeightEntryDTO(dto, to: existing)
+        } else {
+            let newEntry = WeightEntry(date: dto.date, weight: dto.weight)
+            applyWeightEntryDTO(dto, to: newEntry)
+            modelContext.insert(newEntry)
+        }
+    }
+
+    private func applyWeightEntryDTO(_ dto: WeightEntryDTO, to entry: WeightEntry) {
+        entry.remoteID = dto.remoteID
+        entry.date = dto.date
+        entry.weight = dto.weight
+        entry.lastModifiedAt = dto.lastModifiedAt
+        entry.needsSync = false
+    }
+
+    private func makeWeightEntryDTO(from entry: WeightEntry, userRemoteID: String) -> WeightEntryDTO {
+        WeightEntryDTO(
+            remoteID: entry.remoteID ?? "",
+            userID: userRemoteID,
+            date: entry.date,
+            weight: entry.weight,
+            lastModifiedAt: entry.lastModifiedAt
+        )
+    }
+
+    // MARK: - Image Upload Helper
+
+    /// Uploads a food image to Supabase Storage if it exists on disk.
+    /// Returns the storage path on success, nil otherwise.
+    func uploadFoodImage(localPath: String, userRemoteID: String) async -> String? {
+        guard let token = keychainManager.retrieveToken(),
+              let imageData = FileManager.default.contents(atPath: localPath) else { return nil }
+        let fileName = URL(fileURLWithPath: localPath).lastPathComponent
+        let storagePath = "\(userRemoteID)/\(fileName)"
+        do {
+            return try await apiClient.uploadImage(
+                data: imageData,
+                bucket: "food-images",
+                path: storagePath,
+                token: token
+            )
+        } catch {
+            print("⚠️ Image upload failed: \(error)")
+            return nil
+        }
+    }
 }
+

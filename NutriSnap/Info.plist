@@ -19,5 +19,7 @@
 	<string>NutriSnap reads your activity, active energy, and sleep data to personalize your dashboard insights.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>NutriSnap may write nutrition and wellness data to Health when you choose to sync records.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>NutriSnap needs camera access to take photos of your food for nutritional analysis.</string>
 </dict>
 </plist>
