@@ -68,8 +68,7 @@ struct NutrientsDetailView: View {
                 .padding(.top, 16)
                 .padding(.bottom, 24)
 
-                ScrollViewReader { proxy in
-                    ScrollView {
+                ScrollView {
                     VStack(spacing: UIScreen.isSmallDevice ? 16 : 20) {
                         // Date picker card (daily intake focuses on a specific day)
                         NutrientsDatePickerCard(
