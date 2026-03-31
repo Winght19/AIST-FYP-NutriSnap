@@ -951,11 +951,25 @@ struct ExerciseTrendView: View {
                 anchorDate: config.anchorDate
             )
 
-            let points = config.buckets.map { bucket in
-                let value = valuesByDate.first {
-                    calendar.isDate($0.key, equalTo: bucket.date, toGranularity: granularity)
-                }?.value ?? 0
-                return (day: bucket.label, value: value)
+            let points: [(day: String, value: Double?)]
+
+            if timePeriod == .day {
+                let valuesByHour = valuesByDate.reduce(into: [Int: Double]()) { partial, entry in
+                    let hour = calendar.component(.hour, from: entry.key)
+                    partial[hour, default: 0] += entry.value
+                }
+
+                points = config.buckets.map { bucket in
+                    let hour = calendar.component(.hour, from: bucket.date)
+                    return (day: bucket.label, value: valuesByHour[hour] ?? 0)
+                }
+            } else {
+                points = config.buckets.map { bucket in
+                    let value = valuesByDate.first {
+                        calendar.isDate($0.key, equalTo: bucket.date, toGranularity: granularity)
+                    }?.value ?? 0
+                    return (day: bucket.label, value: value)
+                }
             }
 
             chartData = points

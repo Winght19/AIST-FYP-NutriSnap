@@ -1,6 +1,5 @@
 import SwiftUI
 import SwiftData
-import Charts
 
 // MARK: - Screen Size Helper
 extension UIScreen {
@@ -165,29 +164,6 @@ struct HomeView: View {
             }
     }
 
-    private var weeklyNutritionPoints: [WeeklyNutritionPoint] {
-        let startOfToday = calendar.startOfDay(for: Date())
-        let logsByDay = Dictionary(grouping: logs) { log in
-            calendar.startOfDay(for: log.timestamp)
-        }
-
-        return (0..<7).flatMap { dayOffset in
-            let date = calendar.date(byAdding: .day, value: -(6 - dayOffset), to: startOfToday) ?? startOfToday
-            let dayLogs = logsByDay[date] ?? []
-
-            let calories = dayLogs.reduce(0) { $0 + $1.Calories }
-            let carbs = dayLogs.reduce(0) { $0 + $1.Carbohydrate }
-            let protein = dayLogs.reduce(0) { $0 + $1.Protein }
-            let fat = dayLogs.reduce(0) { $0 + $1.Fat }
-
-            return [
-                WeeklyNutritionPoint(date: date, nutrient: .calories, value: calories),
-                WeeklyNutritionPoint(date: date, nutrient: .carbs, value: carbs),
-                WeeklyNutritionPoint(date: date, nutrient: .protein, value: protein),
-                WeeklyNutritionPoint(date: date, nutrient: .fat, value: fat)
-            ]
-        }
-    }
     
     var body: some View {
         GeometryReader { geometry in
@@ -242,40 +218,44 @@ struct HomeView: View {
                         .padding(.top, 10)
                     }
 
-                    // SECTION C: WEEKLY CHART
-                    WeeklyNutritionChartCard(points: weeklyNutritionPoints)
-
                 // SECTION C: ACTIVE CALORIES
-                HStack {
-                    Image(systemName: "heart.fill")
-                        .font(.title2)
-                        .foregroundStyle(.pink)
-                        .padding(10)
-                        .background(Color.pink.opacity(0.1))
-                        .clipShape(Circle())
-                    
-                    VStack(alignment: .leading) {
-                        Text("Active Calories")
-                            .fontWeight(.semibold)
-                        Text("From Apple Health")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                Button {
+                    Task {
+                        await requestHealthAccessFromActiveCaloriesTap()
                     }
-                    Spacer()
-                    VStack(alignment: .trailing) {
-                        Text("\(Int(burnedCalories.rounded()))")
-                            .font(.title3)
-                            .fontWeight(.bold)
-                        Text("cal burned")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                } label: {
+                    HStack {
+                        Image(systemName: "heart.fill")
+                            .font(.title2)
+                            .foregroundStyle(.pink)
+                            .padding(10)
+                            .background(Color.pink.opacity(0.1))
+                            .clipShape(Circle())
+
+                        VStack(alignment: .leading) {
+                            Text("Active Calories")
+                                .fontWeight(.semibold)
+                            Text("From Apple Health")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        VStack(alignment: .trailing) {
+                            Text("\(Int(burnedCalories.rounded()))")
+                                .font(.title3)
+                                .fontWeight(.bold)
+                            Text("cal burned")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
+                    .padding()
+                    .background(Color(uiColor: .secondarySystemGroupedBackground))
+                    .cornerRadius(16)
+                    .shadow(color: Color(uiColor: .label).opacity(0.05), radius: 5, x: 0, y: 2)
+                    .padding(.horizontal)
                 }
-                .padding()
-                .background(Color(uiColor: .secondarySystemGroupedBackground))
-                .cornerRadius(16)
-                .shadow(color: Color(uiColor: .label).opacity(0.05), radius: 5, x: 0, y: 2)
-                .padding(.horizontal)
+                .buttonStyle(.plain)
                 
                 // SECTION D: TODAY'S MEALS
                 VStack(alignment: .leading, spacing: 15) {
@@ -357,6 +337,16 @@ struct HomeView: View {
             healthMetrics = .empty
         }
     }
+
+    @MainActor
+    private func requestHealthAccessFromActiveCaloriesTap() async {
+        do {
+            try await HealthKitService.shared.requestReadAuthorization()
+            await refreshHealthMetrics()
+        } catch {
+            healthMetrics = .empty
+        }
+    }
 }
 
 
@@ -398,95 +388,6 @@ struct MealCalories: Identifiable {
     let mealType: String
     let calories: Double
     let itemCount: Int
-}
-
-enum WeeklyNutrient: String, CaseIterable {
-    case calories = "Calories"
-    case carbs = "Carbs"
-    case protein = "Protein"
-    case fat = "Fat"
-
-    var color: Color {
-        switch self {
-        case .calories:
-            return .green
-        case .carbs:
-            return .blue
-        case .protein:
-            return .orange
-        case .fat:
-            return .pink
-        }
-    }
-}
-
-struct WeeklyNutritionPoint: Identifiable {
-    let id = UUID()
-    let date: Date
-    let nutrient: WeeklyNutrient
-    let value: Double
-}
-
-struct WeeklyNutritionChartCard: View {
-    let points: [WeeklyNutritionPoint]
-
-    private var yMax: Double {
-        let maxValue = points.map(\ .value).max() ?? 1
-        return max(maxValue * 1.2, 100)
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Chart")
-                .font(.headline)
-
-            Chart(points) { point in
-                LineMark(
-                    x: .value("Date", point.date),
-                    y: .value(point.nutrient.rawValue, point.value)
-                )
-                .interpolationMethod(.catmullRom)
-                .foregroundStyle(by: .value("Nutrient", point.nutrient.rawValue))
-
-                PointMark(
-                    x: .value("Date", point.date),
-                    y: .value(point.nutrient.rawValue, point.value)
-                )
-                .foregroundStyle(by: .value("Nutrient", point.nutrient.rawValue))
-                .symbolSize(20)
-            }
-            .chartYScale(domain: 0...yMax)
-            .chartXAxis {
-                AxisMarks(values: .stride(by: .day)) { value in
-                    AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [2, 2]))
-                        .foregroundStyle(.gray.opacity(0.2))
-                    AxisTick()
-                    AxisValueLabel {
-                        if let date = value.as(Date.self) {
-                            Text(date, format: .dateTime.weekday(.abbreviated))
-                                .font(.caption2)
-                        }
-                    }
-                }
-            }
-            .chartYAxis {
-                AxisMarks(position: .leading)
-            }
-            .chartLegend(position: .bottom, alignment: .leading, spacing: 12)
-            .chartForegroundStyleScale([
-                WeeklyNutrient.calories.rawValue: WeeklyNutrient.calories.color,
-                WeeklyNutrient.carbs.rawValue: WeeklyNutrient.carbs.color,
-                WeeklyNutrient.protein.rawValue: WeeklyNutrient.protein.color,
-                WeeklyNutrient.fat.rawValue: WeeklyNutrient.fat.color
-            ])
-            .frame(height: 220)
-        }
-        .padding()
-        .background(Color(uiColor: .secondarySystemGroupedBackground))
-        .cornerRadius(16)
-        .shadow(color: Color(uiColor: .label).opacity(0.05), radius: 5, x: 0, y: 2)
-        .padding(.horizontal)
-    }
 }
 
 // --- SLIDE 1: NUTRITION (Your Original Grid) ---
@@ -749,6 +650,7 @@ struct ActivityRow: View {
 // --- SLIDE 3: SLEEP (Donut Chart) ---
 struct SleepCard: View {
     let metrics: SleepBreakdown
+    private let sleepGoalMinutes: Double = 8 * 60
 
     @ScaledMetric(relativeTo: .body) private var scaledDonutSize: CGFloat = UIScreen.isSmallDevice ? 100 : 120
     @ScaledMetric(relativeTo: .body) private var donutLineWidth: CGFloat = UIScreen.isSmallDevice ? 10 : 12
@@ -773,6 +675,10 @@ struct SleepCard: View {
     private var totalSleepText: String {
         formatDuration(minutes: metrics.totalMinutes)
     }
+
+    private var totalSleepProgress: Double {
+        min(max(metrics.totalMinutes / sleepGoalMinutes, 0), 1)
+    }
     
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -785,17 +691,25 @@ struct SleepCard: View {
                 // Donut Chart
                 Spacer()
                 ZStack {
-                    ForEach(Array(sleepSegments.enumerated()), id: \.offset) { index, segment in
-                        TrimmedCircle(
-                            start: segmentStart(index: index),
-                            end: segmentEnd(index: index),
-                            color: segment.color,
-                            lineWidth: donutLineWidth
+                    Circle()
+                        .stroke(Color.indigo.opacity(0.15), lineWidth: donutLineWidth)
+
+                    Circle()
+                        .trim(from: 0, to: totalSleepProgress)
+                        .stroke(
+                            AngularGradient(
+                                colors: [.cyan, .blue, .indigo],
+                                center: .center
+                            ),
+                            style: StrokeStyle(lineWidth: donutLineWidth, lineCap: .round)
                         )
-                    }
+                        .rotationEffect(.degrees(-90))
+                        .animation(.easeInOut(duration: 1.0), value: totalSleepProgress)
+
                     VStack(spacing: 2) {
-                        Image(systemName: "moon.fill")
+                        Image(systemName: "moon.stars.fill")
                             .font(UIScreen.isSmallDevice ? .body : .title3)
+                            .foregroundStyle(.indigo)
                         Text(totalSleepText)
                             .font(UIScreen.isSmallDevice ? .callout : .body)
                             .fontWeight(.bold)
