@@ -122,17 +122,12 @@ struct LogsView: View {
     private func nextDay() {
         selectedDate = Calendar.current.date(byAdding: .day, value: 1, to: selectedDate) ?? selectedDate
     }
-
-    private func delete(_ log: FoodLog) {
-        FoodLogImageStore.shared.deleteImage(at: log.imagePath)
-        modelContext.delete(log)
-        try? modelContext.save()
-    }
 }
 
 struct LogEntryRow: View {
     let log: FoodLog
     let onDelete: () -> Void
+    @State private var showDeleteConfirm = false
 
     private var loadedImage: UIImage? {
         FoodLogImageStore.shared.image(for: log.imagePath)
@@ -255,11 +250,17 @@ struct LogEntryRow: View {
                 .buttonStyle(.plain)
 
                 // Trash delete button
-                Button(action: onDelete) {
+                Button(action: { showDeleteConfirm = true }) {
                     Image(systemName: "trash")
                         .font(.subheadline)
                         .foregroundColor(Color(red: 0.85, green: 0.55, blue: 0.55))
                         .padding(16)
+                }
+                .confirmationDialog("Delete \"\(log.foodName)\"?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+                    Button("Delete", role: .destructive) { onDelete() }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("This will permanently remove this food log entry.")
                 }
             }
         }

@@ -64,12 +64,17 @@ final class SyncService {
         modelContext.delete(foodLog)
         try? modelContext.save()
 
-        // Fire background network DELETE if we have the remote ID
+        // Fire background delete via Supabase RPC (bypasses RLS auth.uid() mismatch)
         guard let remoteID, let token else { return }
         Task {
             do {
-                // PostgREST REST DELETE: /food_logs?remote_id=eq.{id}
-                try await apiClient.delete("/food_logs?remote_id=eq.\(remoteID)", token: token)
+                struct RPCParams: Encodable { let pRemoteId: String }
+                let _: Int = try await apiClient.restPost(
+                    "/rpc/delete_food_log_by_remote_id",
+                    body: RPCParams(pRemoteId: remoteID),
+                    token: token
+                )
+                print("✅ Remote deleted FoodLog \(remoteID)")
             } catch {
                 print("⚠️ Remote delete failed for FoodLog \(remoteID): \(error.localizedDescription)")
             }
