@@ -3,22 +3,24 @@ import Combine
 
 @MainActor
 class RecipeAIRecommendationViewModel: ObservableObject {
-    @Published var recommendationText: String = ""
-    @Published var recommendedRecipes: [SupabaseRecipe] = []
+    static let shared = RecipeAIRecommendationViewModel()
+    
+    @Published var messages: [AIChatMessage] = []
     @Published var isTyping: Bool = false
     @Published var errorMessage: String? = nil
     
-    // Replace with actual hosted API URL later
     private let apiUrl = URL(string: "http://localhost:8000/api/recommend")!
     
-    // Fetch recommendation and subsequent recipes
+    private init() {} // Singleton
+    
     func fetchRecommendation(query: String, currentUser: User?) async {
+        // Append User Message to history
+        let userMsg = AIChatMessage(isUser: true, text: query, recipes: nil)
+        messages.append(userMsg)
+        
         isTyping = true
         errorMessage = nil
-        recommendationText = ""
-        recommendedRecipes = []
         
-        // Build payload
         let allergens = currentUser?.allergens ?? []
         let dietaryTags = currentUser?.preferredDiets ?? []
         let goals = NutrientGoals(
@@ -31,7 +33,7 @@ class RecipeAIRecommendationViewModel: ObservableObject {
             userAllergies: allergens,
             userTags: dietaryTags,
             nutrientGoals: goals,
-            dailyIntake: nil // Can be extended later if needed
+            dailyIntake: nil
         )
         
         do {
@@ -40,29 +42,24 @@ class RecipeAIRecommendationViewModel: ObservableObject {
             request.addValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = try JSONEncoder().encode(requestPayload)
             
-            // 1. Make the Network Call to RAG API
             let (data, response) = try await URLSession.shared.data(for: request)
             
-            guard let httpResponse = response as? HTTPURLResponse else {
-                errorMessage = "Invalid response from server"
+            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+                errorMessage = "Server error"
                 isTyping = false
                 return
             }
             
-            guard httpResponse.statusCode == 200 else {
-                errorMessage = "Server error: \(httpResponse.statusCode)"
-                isTyping = false
-                return
-            }
-            
-            // 2. Decode the Response
             let result = try JSONDecoder().decode(RecommendResponse.self, from: data)
-            self.recommendationText = result.recommendation
             
-            // 3. Fetch full recipe objects from Supabase if we have IDs
+            var fetchedRecipes: [SupabaseRecipe]? = nil
             if !result.recipeIds.isEmpty {
-                await fetchFullRecipes(ids: result.recipeIds)
+                fetchedRecipes = await fetchFullRecipes(ids: result.recipeIds)
             }
+            
+            // Append AI Message to history
+            let aiMsg = AIChatMessage(isUser: false, text: result.recommendation, recipes: fetchedRecipes)
+            messages.append(aiMsg)
             
         } catch {
             print("Failed to fetch recommendation: \(error)")
@@ -72,18 +69,23 @@ class RecipeAIRecommendationViewModel: ObservableObject {
         isTyping = false
     }
     
-    // Helper to fetch rich recipes from Supabase once the IDs are known
-    private func fetchFullRecipes(ids: [Int]) async {
+    private func fetchFullRecipes(ids: [Int]) async -> [SupabaseRecipe] {
         let idsString = ids.map { String($0) }.joined(separator: ",")
         let selectQuery = "id,title,recipeNutrients:recipe_nutrients(amount,nutrient:nutrient_definitions(name,unit)),difficulty:difficulty_levels(name),cuisine:cuisines(name)"
         let endpoint = "/recipes?select=\(selectQuery)&id=in.(\(idsString))"
         
         do {
             let fetchedRecipes: [SupabaseRecipe] = try await APIClient.shared.restGet(endpoint)
-            // Sort to match original returned order if needed, or just append
-            self.recommendedRecipes = fetchedRecipes
+            return fetchedRecipes
         } catch {
-            print("Failed to fetch rich recipes from Supabase: \(error)")
+            print("Failed to fetch rich recipes: \(error)")
+            return []
         }
+    }
+    
+    func clearHistory() {
+        messages = []
+        errorMessage = nil
+        isTyping = false
     }
 }

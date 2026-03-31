@@ -87,6 +87,35 @@ final class APIClient {
 
     private init() {}
 
+    // MARK: - Storage Upload
+
+    /// Uploads an image to Supabase Storage and returns the public URL.
+    /// The bucket should have RLS policies to restrict access to the owning user.
+    func uploadImage(data: Data, bucket: String, path: String, token: String) async throws -> String {
+        let storageURL = "https://sqgwalooucvabofnjrcx.supabase.co/storage/v1/object/\(bucket)/\(path)"
+        guard let url = URL(string: storageURL) else {
+            throw APIError.invalidURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
+        request.setValue(supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.httpBody = data
+
+        let (_, response) = try await URLSession.shared.data(for: request)
+
+        guard let http = response as? HTTPURLResponse,
+              (200..<300).contains(http.statusCode) else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            throw APIError.httpError(statusCode)
+        }
+
+        // Return the path that can be used to construct a signed/public URL
+        return path
+    }
+
     // MARK: - Public Methods
 
     func get<T: Decodable>(_ endpoint: String, token: String?) async throws -> T {
@@ -103,7 +132,22 @@ final class APIClient {
         return try await execute(endpoint: endpoint, method: "PUT", bodyData: data, token: token, isREST: false)
     }
 
-    // MARK: - REST Methods
+    /// Sends a DELETE request to the PostgREST REST API. Does not expect a response body.
+    func delete(_ endpoint: String, token: String?) async throws {
+        guard let url = URL(string: restURL + endpoint) else { throw APIError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(supabaseAnonKey, forHTTPHeaderField: "apikey")
+        if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        else { request.setValue("Bearer \(supabaseAnonKey)", forHTTPHeaderField: "Authorization") }
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw APIError.httpError((response as? HTTPURLResponse)?.statusCode ?? -1)
+        }
+    }
+
+
 
     func restGet<T: Decodable>(_ endpoint: String, token: String? = nil) async throws -> T {
         try await execute(endpoint: endpoint, method: "GET", bodyData: nil, token: token, isREST: true)

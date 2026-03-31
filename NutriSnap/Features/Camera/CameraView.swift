@@ -59,6 +59,9 @@ struct CameraView: View {
     @State private var cameraManager = CameraManager()
     @State private var capturedImage: UIImage?
     @Environment(\.modelContext) private var modelContext
+    @Environment(AppStateManager.self) private var appStateManager
+    
+    private let syncService = SyncService()
     
     // Bridge to Logic
     @StateObject private var pipeline = FoodRecognitionPipeline()
@@ -221,28 +224,63 @@ struct CameraView: View {
                             capturedImage: capturedImage,
                             baseNutrition: nutrition,
                             onSave: { finalNutrition, servings, editedName, savedDate, mealType in
-                                // Save image to Documents directory
-                                var savedImagePath: String? = nil
-                                if let image = capturedImage,
-                                   let data = image.jpegData(compressionQuality: 0.8) {
-                                    let fileName = UUID().uuidString + ".jpg"
-                                    let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                                        .appendingPathComponent(fileName)
-                                    try? data.write(to: url)
-                                    savedImagePath = url.path
+                                // Save a local copy of the image first for immediate UI display
+                                var localImagePath: String? = nil
+                                var compressedImageData: Data? = nil
+                                if let image = capturedImage {
+                                    // Full-res local copy (for FoodLogDetailView)
+                                    if let fullData = image.jpegData(compressionQuality: 0.8) {
+                                        let fileName = UUID().uuidString + ".jpg"
+                                        let url = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                                            .appendingPathComponent(fileName)
+                                        try? fullData.write(to: url)
+                                        localImagePath = url.path
+                                    }
+                                    // Lower-res data for Supabase upload (~50% quality ≈ 4× smaller file)
+                                    compressedImageData = image.jpegData(compressionQuality: 0.4)
                                 }
+
                                 let log = FoodLog(
                                     name: editedName,
                                     calories: finalNutrition.calories,
                                     protein: finalNutrition.protein,
                                     carbs: finalNutrition.carbohydrates,
                                     fat: finalNutrition.fat,
-                                    imagePath: savedImagePath,
+                                    imagePath: localImagePath,
                                     timestamp: savedDate,
                                     mealType: mealType,
                                     mass: finalNutrition.mass
                                 )
                                 modelContext.insert(log)
+                                log.user = appStateManager.currentUser
+                                try? modelContext.save()
+
+                                // Upload compressed image to Supabase Storage in background
+                                if let imageData = compressedImageData,
+                                   let token = KeychainManager.shared.retrieveToken(),
+                                   let userID = appStateManager.currentUser?.remoteID {
+                                    Task {
+                                        do {
+                                            let remotePath = "\(userID)/\(UUID().uuidString).jpg"
+                                            let _ = try await APIClient.shared.uploadImage(
+                                                data: imageData,
+                                                bucket: "food-images",
+                                                path: remotePath,
+                                                token: token
+                                            )
+                                            // Store the remote path so the DTO can reference it
+                                            log.imagePath = remotePath
+                                            try? modelContext.save()
+                                        } catch {
+                                            print("⚠️ Image upload failed: \(error.localizedDescription)")
+                                        }
+                                        // Sync the food log (with or without an image URL)
+                                        syncService.writeThrough(foodLog: log, modelContext: modelContext)
+                                    }
+                                } else {
+                                    syncService.writeThrough(foodLog: log, modelContext: modelContext)
+                                }
+
                                 pipeline.reset()
                                 nutritionPipeline.reset()
                                 capturedImage = nil

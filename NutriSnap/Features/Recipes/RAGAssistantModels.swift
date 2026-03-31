@@ -42,3 +42,13 @@ struct RecommendResponse: Decodable {
         case status
     }
 }
+
+// MARK: - Chat State Models
+
+struct AIChatMessage: Identifiable {
+    let id = UUID()
+    let isUser: Bool
+    let text: String
+    let recipes: [SupabaseRecipe]?
+    let timestamp: Date = Date()
+}

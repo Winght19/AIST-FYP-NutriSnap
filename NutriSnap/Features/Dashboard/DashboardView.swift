@@ -146,17 +146,20 @@ struct HomeView: View {
                             .buttonStyle(PlainButtonStyle())
                             .tag(0)
                             
-                            ActivitiesCard()
+                            WeightWidgetView()
                                 .tag(1)
-                            SleepCard()
+                            
+                            ActivitiesCard()
                                 .tag(2)
+                            SleepCard()
+                                .tag(3)
                         }
                         .tabViewStyle(.page(indexDisplayMode: .never)) 
                         .frame(height: geometry.size.height * 0.35)
                         
                         // Custom page indicator below the cards
                         HStack(spacing: 8) {
-                            ForEach(0..<3) { index in
+                            ForEach(0..<4) { index in
                                 Circle()
                                     .fill(index == currentPage ? Color.gray : Color.gray.opacity(0.3))
                                     .frame(width: 8, height: 8)

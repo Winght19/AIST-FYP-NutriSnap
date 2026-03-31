@@ -5,6 +5,9 @@ struct FoodLogDTO: Codable {
     let remoteID: String
     let userID: String      // owning User's remoteID — the security boundary
     let foodName: String
+    let mealType: String?
+    let mass: Double?
+    let imageUrl: String?
     let timestamp: Date
     let lastModifiedAt: Date
 
@@ -39,7 +42,7 @@ struct FoodLogDTO: Codable {
     private enum CodingKeys: String, CodingKey {
         case remoteID = "remoteId"
         case userID = "userId"
-        case foodName, timestamp, lastModifiedAt
+        case foodName, mealType, mass, imageUrl, timestamp, lastModifiedAt
         case calories, protein, carbohydrate, fiber
         case calcium, iron, potassium, sodium, zinc
         case vitaminA, vitaminC, vitaminD
