@@ -49,6 +49,14 @@ final class HealthKitService {
 
     private init() {}
 
+    func requestReadAuthorization() async throws {
+        guard HKHealthStore.isHealthDataAvailable() else {
+            throw HealthKitServiceError.unavailable
+        }
+
+        try await requestAuthorization()
+    }
+
     private func safeSumQuantity(
         _ identifier: HKQuantityTypeIdentifier,
         from startDate: Date,

@@ -250,7 +250,7 @@ private struct NutritionTrendCard: View {
     @State private var summaryValue: Double = 0
 
     private var maxValue: Double {
-        max(chartData.compactMap(\.value).max() ?? 0, timePeriod == .day ? nutrientGoal : 1)
+        max(chartData.compactMap(\.value).max() ?? 0, 1)
     }
 
     private var periodLabel: String {
