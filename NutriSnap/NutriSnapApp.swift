@@ -13,6 +13,7 @@ struct NutriSnapApp: App {
             Meal.self,
             Food.self,
             FoodLog.self,
+            WeightEntry.self
         ])
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
         do {

@@ -20,6 +20,7 @@ class User {
     // MARK: - Physical Profile
     var dateOfBirth: Date?
     var weight: Double?            // kg
+    var targetWeight: Double? = nil // custom goal weight in kg
     var height: Double?            // cm
     var gender: String?
     var primaryGoal: String?
@@ -44,6 +45,7 @@ class User {
     // MARK: - Relationships
     @Relationship(deleteRule: .cascade, inverse: \Meal.user) var meals: [Meal]?
     @Relationship(deleteRule: .cascade, inverse: \FoodLog.user) var foodLogs: [FoodLog]?
+    @Relationship(deleteRule: .cascade) var weightHistory: [WeightEntry]?
 
     init(googleSub: String, email: String, name: String) {
         self.remoteID = nil

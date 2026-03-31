@@ -20,160 +20,166 @@ struct RecipeDetailView: View {
     let brandTextGray = Color(white: 0.4)
     
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                if viewModel.isLoading {
-                    ProgressView("Loading details...")
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.top, 40)
-                } else if let error = viewModel.errorMessage {
-                    Text("Error: \(error)")
-                        .foregroundColor(.red)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                } else if let recipe = viewModel.recipe {
-                    
-                    VStack(alignment: .leading, spacing: 16) {
-                        // 1. Title & Badges
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text(recipe.title)
-                                .font(.largeTitle)
-                                .fontWeight(.bold)
-                                .fixedSize(horizontal: false, vertical: true)
-                            
-                            // 1. Difficulty Row
-                            if let difficulty = recipe.difficulty?.name {
-                                Text(difficulty.capitalized)
-                                    .font(.caption)
-                                    .fontWeight(.semibold)
-                                    .padding(.horizontal, 12)
-                                    .padding(.vertical, 6)
-                                    .background(brandPillGray)
-                                    .clipShape(Capsule())
-                                    .fixedSize(horizontal: true, vertical: false)
-                            }
-                            
-                            // 2. Allergens Row
-                            if let allergens = recipe.recipeAllergens, !allergens.isEmpty {
-                                ScrollView(.horizontal, showsIndicators: false) {
-                                    HStack(spacing: 8) {
-                                        ForEach(allergens, id: \.self) { allergen in
-                                            let dbName = allergen.allergen.name
-                                            let displayName = dbName.replacingOccurrences(of: "_allergen", with: "").capitalized
-                                            let isUserAllergic = appStateManager.currentUser?.allergens.contains(displayName) ?? false
-                                            
-                                            HStack(spacing: 4) {
-                                                if isUserAllergic {
-                                                    Image(systemName: "exclamationmark.triangle.fill")
+        VStack(spacing: 0) {
+            // Custom Navigation Bar area
+            HStack {
+                BackButton()
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 10)
+            .padding(.bottom, 10)
+            .background(.white) // Ensure it visually separates if needed, or clear
+            
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    if viewModel.isLoading {
+                        ProgressView("Loading details...")
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.top, 40)
+                    } else if let error = viewModel.errorMessage {
+                        Text("Error: \(error)")
+                            .foregroundColor(.red)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                    } else if let recipe = viewModel.recipe {
+                        
+                        VStack(alignment: .leading, spacing: 16) {
+                            // 1. Title & Badges
+                            VStack(alignment: .leading, spacing: 12) {
+                                Text(recipe.title)
+                                    .font(.largeTitle)
+                                    .fontWeight(.bold)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                
+                                // 1. Difficulty Row
+                                if let difficulty = recipe.difficulty?.name {
+                                    Text(difficulty.capitalized)
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                        .padding(.horizontal, 12)
+                                        .padding(.vertical, 6)
+                                        .background(brandPillGray)
+                                        .clipShape(Capsule())
+                                        .fixedSize(horizontal: true, vertical: false)
+                                }
+                                
+                                // 2. Allergens Row
+                                if let allergens = recipe.recipeAllergens, !allergens.isEmpty {
+                                    ScrollView(.horizontal, showsIndicators: false) {
+                                        HStack(spacing: 8) {
+                                            ForEach(allergens, id: \.self) { allergen in
+                                                let dbName = allergen.allergen.name
+                                                let displayName = dbName.replacingOccurrences(of: "_allergen", with: "").capitalized
+                                                let isUserAllergic = appStateManager.currentUser?.allergens.contains(displayName) ?? false
+                                                
+                                                HStack(spacing: 4) {
+                                                    if isUserAllergic {
+                                                        Image(systemName: "exclamationmark.triangle.fill")
+                                                    }
+                                                    Text(displayName)
+                                                        .fontWeight(.semibold)
                                                 }
-                                                Text(displayName)
-                                                    .fontWeight(.semibold)
+                                                .font(.caption)
+                                                .foregroundColor(.red)
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 6)
+                                                .background(Color.red.opacity(0.15))
+                                                .clipShape(Capsule())
+                                                .fixedSize(horizontal: true, vertical: false)
                                             }
-                                            .font(.caption)
-                                            .foregroundColor(.red)
-                                            .padding(.horizontal, 12)
-                                            .padding(.vertical, 6)
-                                            .background(Color.red.opacity(0.15))
-                                            .clipShape(Capsule())
-                                            .fixedSize(horizontal: true, vertical: false)
                                         }
                                     }
                                 }
                             }
-                        }
-                        
-                        // 3. Dietary Tags Row
-                        if let tags = recipe.recipeDietaryTags, !tags.isEmpty {
-                            ScrollView(.horizontal, showsIndicators: false) {
-                                HStack(spacing: 8) {
-                                    ForEach(tags, id: \.self) { dietaryTag in
-                                        Text(dietaryTag.tag.name)
-                                            .font(.caption)
-                                            .fontWeight(.medium)
-                                            .padding(.horizontal, 12)
-                                            .padding(.vertical, 6)
-                                            .background(brandPillGray)
-                                            .clipShape(Capsule())
-                                            .fixedSize(horizontal: true, vertical: false)
+                            
+                            // 3. Dietary Tags Row
+                            if let tags = recipe.recipeDietaryTags, !tags.isEmpty {
+                                ScrollView(.horizontal, showsIndicators: false) {
+                                    HStack(spacing: 8) {
+                                        ForEach(tags, id: \.self) { dietaryTag in
+                                            Text(dietaryTag.tag.name)
+                                                .font(.caption)
+                                                .fontWeight(.medium)
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 6)
+                                                .background(brandPillGray)
+                                                .clipShape(Capsule())
+                                                .fixedSize(horizontal: true, vertical: false)
+                                        }
                                     }
                                 }
                             }
-                        }
-                        
-                        // 4. Calories Quick Badge
-                        if let calories = recipe.recipeNutrients?.first(where: { $0.nutrient.name == "Calories" }) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "flame.fill")
-                                    .font(.caption)
-                                Text("\(Int(calories.amount)) kcal")
-                                    .font(.subheadline)
-                                    .fontWeight(.bold)
-                            }
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(brandPink)
-                            .clipShape(Capsule())
-                        }
-                        
-                        // 5. Custom Tab Picker
-                        HStack {
-                            ForEach(DetailTab.allCases, id: \.self) { tab in
-                                Button(action: {
-                                    withAnimation {
-                                        selectedTab = tab
-                                    }
-                                }) {
-                                    Text(tab.rawValue)
+                            
+                            // 4. Calories Quick Badge
+                            if let calories = recipe.recipeNutrients?.first(where: { $0.nutrient.name == "Calories" }) {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "flame.fill")
+                                        .font(.caption)
+                                    Text("\(Int(calories.amount)) kcal")
                                         .font(.subheadline)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(selectedTab == tab ? .primary : brandTextGray)
-                                        .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 10)
-                                        .background(selectedTab == tab ? Color.white : Color.clear)
-                                        .cornerRadius(20)
+                                        .fontWeight(.bold)
+                                }
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(brandPink)
+                                .clipShape(Capsule())
+                            }
+                            
+                            // 5. Custom Tab Picker
+                            HStack {
+                                ForEach(DetailTab.allCases, id: \.self) { tab in
+                                    Button(action: {
+                                        withAnimation {
+                                            selectedTab = tab
+                                        }
+                                    }) {
+                                        Text(tab.rawValue)
+                                            .font(.subheadline)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(selectedTab == tab ? .primary : brandTextGray)
+                                            .frame(maxWidth: .infinity)
+                                            .padding(.vertical, 10)
+                                            .background(selectedTab == tab ? Color.white : Color.clear)
+                                            .cornerRadius(20)
+                                    }
                                 }
                             }
-                        }
-                        .padding(4)
-                        .background(brandGrayBG)
-                        .cornerRadius(24)
-                        .padding(.top, 8)
-                        
-                        // 6. Content Card (Pink Border)
-                        VStack(alignment: .leading, spacing: 16) {
-                            switch selectedTab {
-                            case .ingredients:
-                                ingredientsView(recipe: recipe)
-                            case .steps:
-                                stepsView(recipe: recipe)
-                            case .nutrition:
-                                nutritionView(recipe: recipe)
+                            .padding(4)
+                            .background(brandGrayBG)
+                            .cornerRadius(24)
+                            .padding(.top, 8)
+                            
+                            // 6. Content Card (Pink Border)
+                            VStack(alignment: .leading, spacing: 16) {
+                                switch selectedTab {
+                                case .ingredients:
+                                    ingredientsView(recipe: recipe)
+                                case .steps:
+                                    stepsView(recipe: recipe)
+                                case .nutrition:
+                                    nutritionView(recipe: recipe)
+                                }
                             }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(20)
+                            // The UI mockup has a rounded rectangle pink border inside
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .stroke(brandPink.opacity(0.4), lineWidth: 1.5)
+                            )
+                            .padding(.top, 8)
+                            
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(20)
-                        // The UI mockup has a rounded rectangle pink border inside
-                        .background(
-                            RoundedRectangle(cornerRadius: 16)
-                                .stroke(brandPink.opacity(0.4), lineWidth: 1.5)
-                        )
-                        .padding(.top, 8)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 16)
                         
+                        Spacer(minLength: 120) // Leave room for bottom navigation bar
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.top, 16)
-                    
-                    Spacer(minLength: 120) // Leave room for bottom navigation bar
                 }
             }
         }
-        .navigationBarTitleDisplayMode(.inline)
-        .navigationBarBackButtonHidden(true)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                BackButton()
-            }
-        }
+        .navigationBarHidden(true)
         .task {
             await viewModel.fetchRecipeDetail(id: recipeId)
         }

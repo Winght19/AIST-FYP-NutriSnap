@@ -3,9 +3,12 @@ import SwiftData
 
 struct LogsView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(AppStateManager.self) private var appStateManager
     @Query private var allLogs: [FoodLog]
     @State private var selectedDate = Date()
     @State private var showDatePicker = false
+
+    private let syncService = SyncService()
 
     var logsForSelectedDate: [FoodLog] {
         let calendar = Calendar.current
@@ -78,7 +81,7 @@ struct LogsView: View {
                         ForEach(logsForSelectedDate) { log in
                             LogEntryRow(
                                 log: log,
-                                onDelete: { delete(log) }
+                                onDelete: { syncService.deleteFoodLog(log, modelContext: modelContext) }
                             )
                         }
                     }

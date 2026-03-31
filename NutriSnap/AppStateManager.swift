@@ -16,15 +16,15 @@ final class AppStateManager {
     let authManager: AuthenticationManager
 
     init(
-        keychainManager: KeychainManager = .shared,
-        userProfileService: UserProfileService = UserProfileService(),
-        syncService: SyncService = SyncService(),
-        authManager: AuthenticationManager = AuthenticationManager()
+        keychainManager: KeychainManager? = nil,
+        userProfileService: UserProfileService? = nil,
+        syncService: SyncService? = nil,
+        authManager: AuthenticationManager? = nil
     ) {
-        self.keychainManager = keychainManager
-        self.userProfileService = userProfileService
-        self.syncService = syncService
-        self.authManager = authManager
+        self.keychainManager = keychainManager ?? KeychainManager.shared
+        self.userProfileService = userProfileService ?? UserProfileService()
+        self.syncService = syncService ?? SyncService()
+        self.authManager = authManager ?? AuthenticationManager()
     }
 
     // MARK: - Event Handlers
