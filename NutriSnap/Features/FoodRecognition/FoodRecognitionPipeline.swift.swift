@@ -39,6 +39,7 @@ class FoodRecognitionPipeline: ObservableObject {
     @Published var state: RecognitionState = .idle
     @Published var topPredictions: [FoodDetection] = []
     @Published var selectedFood: String?
+    @Published var isModelLoading: Bool = true
     
     private var yoloModel: VNCoreMLModel?
     private var kerasModel: VNCoreMLModel?
@@ -78,42 +79,58 @@ class FoodRecognitionPipeline: ObservableObject {
     
     // MARK: - Load Core ML Models
     private func loadModels() {
-        // Load YOLOv8 model
-        if let yoloURL = Bundle.main.url(forResource: "food-reg_yolov8s", withExtension: "mlmodelc") ??
-            Bundle.main.url(forResource: "food-reg_yolov8s", withExtension: "mlpackage") {
-            do {
-                let config = MLModelConfiguration()
-                config.computeUnits = .all
-                let mlModel = try MLModel(contentsOf: yoloURL, configuration: config)
-                yoloModel = try VNCoreMLModel(for: mlModel)
-                print("✓ YOLOv8 model loaded successfully")
-            } catch {
-                print("Error loading YOLOv8 model: \(error)")
+        Task.detached(priority: .userInitiated) { [weak self] in
+            var loadedYOLO: VNCoreMLModel?
+            var loadedKeras: VNCoreMLModel?
+
+            // Load YOLOv8 model
+            if let yoloURL = Bundle.main.url(forResource: "food-reg_yolov8s", withExtension: "mlmodelc") ??
+                Bundle.main.url(forResource: "food-reg_yolov8s", withExtension: "mlpackage") {
+                do {
+                    let config = MLModelConfiguration()
+                    config.computeUnits = .all
+                    let mlModel = try MLModel(contentsOf: yoloURL, configuration: config)
+                    loadedYOLO = try VNCoreMLModel(for: mlModel)
+                    print("✓ YOLOv8 model loaded successfully")
+                } catch {
+                    print("Error loading YOLOv8 model: \(error)")
+                }
+            } else {
+                print("YOLOv8 model file not found in bundle")
             }
-        } else {
-            print("YOLOv8 model file not found in bundle")
-        }
-        
-        // Load Keras fallback model
-        if let kerasURL = Bundle.main.url(forResource: "food-reg_food101xhklocal", withExtension: "mlmodelc") ??
-            Bundle.main.url(forResource: "food-reg_food101xhklocal", withExtension: "mlpackage") {
-            do {
-                let config = MLModelConfiguration()
-                config.computeUnits = .all
-                let mlModel = try MLModel(contentsOf: kerasURL, configuration: config)
-                kerasModel = try VNCoreMLModel(for: mlModel)
-                print("✓ Keras fallback model loaded successfully")
-            } catch {
-                print("Error loading Keras model: \(error)")
+
+            // Load Keras fallback model
+            if let kerasURL = Bundle.main.url(forResource: "food-reg_food101xhklocal", withExtension: "mlmodelc") ??
+                Bundle.main.url(forResource: "food-reg_food101xhklocal", withExtension: "mlpackage") {
+                do {
+                    let config = MLModelConfiguration()
+                    config.computeUnits = .all
+                    let mlModel = try MLModel(contentsOf: kerasURL, configuration: config)
+                    loadedKeras = try VNCoreMLModel(for: mlModel)
+                    print("✓ Keras fallback model loaded successfully")
+                } catch {
+                    print("Error loading Keras model: \(error)")
+                }
+            } else {
+                print("Keras model file not found in bundle")
             }
-        } else {
-            print("Keras model file not found in bundle")
+
+            await MainActor.run {
+                self?.yoloModel = loadedYOLO
+                self?.kerasModel = loadedKeras
+                self?.isModelLoading = false
+            }
         }
     }
     
     // MARK: - Main Recognition Pipeline
     @MainActor
     func processImage(_ image: UIImage) async {
+        guard !isModelLoading else {
+            state = .error("Food recognition is still preparing. Please try again in a moment.")
+            return
+        }
+
         state = .identifyingFood
         topPredictions = []
         
@@ -321,6 +338,7 @@ class FoodRecognitionPipeline: ObservableObject {
 // MARK: - Food Recognition Loading View (Plain White, Full Screen)
 struct FoodRecognitionLoadingView: View {
     let state: RecognitionState
+    var customText: String? = nil
 
     var body: some View {
         ZStack {
@@ -346,6 +364,10 @@ struct FoodRecognitionLoadingView: View {
     }
 
     private var statusText: String {
+        if let customText {
+            return customText
+        }
+
         switch state {
         case .identifyingFood: return "Identifying the food..."
         case .calculatingNutrition: return "Analyzing nutrition..."
@@ -525,7 +547,15 @@ struct FoodRecognitionCameraView: View {
             // Overlay other states on top
             switch pipeline.state {
             case .idle:
-                EmptyView()
+                if pipeline.isModelLoading {
+                    FoodRecognitionLoadingView(
+                        state: .identifyingFood,
+                        customText: "Preparing food recognition..."
+                    )
+                    .zIndex(10)
+                } else {
+                    EmptyView()
+                }
                 
             case .identifyingFood:
                 FoodRecognitionLoadingView(

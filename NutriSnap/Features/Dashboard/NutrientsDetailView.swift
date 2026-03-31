@@ -68,8 +68,7 @@ struct NutrientsDetailView: View {
                 .padding(.top, 16)
                 .padding(.bottom, 24)
 
-                ScrollViewReader { proxy in
-                    ScrollView {
+                ScrollView {
                     VStack(spacing: UIScreen.isSmallDevice ? 16 : 20) {
                         // Date picker card (daily intake focuses on a specific day)
                         NutrientsDatePickerCard(
@@ -81,38 +80,18 @@ struct NutrientsDetailView: View {
                         // Daily nutrient progress (main focus, shown first)
                         NutrientsProgressCard(
                             nutrients: nutrients,
+                            selectedDate: selectedDate,
+                            logs: logs,
+                            selectedTimePeriod: $selectedTimePeriod,
                             selectedNutrientType: selectedNutrientType
                         ) { nutrientType in
                             withAnimation(.easeInOut(duration: 0.2)) {
-                                selectedNutrientType = nutrientType
+                                selectedNutrientType = (selectedNutrientType == nutrientType) ? nil : nutrientType
                             }
                         }
-                            .padding(.horizontal)
-
-                        if let selectedNutrientType {
-                            TimePeriodSelector(selectedPeriod: $selectedTimePeriod)
-                                .padding(.horizontal)
-
-                            NutritionTrendCard(
-                                timePeriod: selectedTimePeriod,
-                                referenceDate: selectedDate,
-                                logs: logs,
-                                nutrientType: selectedNutrientType,
-                                nutrientGoal: nutrients.first(where: { $0.type == selectedNutrientType })?.target ?? 1
-                            )
-                            .padding(.horizontal)
-                            .id("selected-nutrition-chart")
-                            .transition(.opacity.combined(with: .move(edge: .bottom)))
-                        }
+                        .padding(.horizontal)
                     }
                     .padding(.bottom, 100)
-                    }
-                    .onChange(of: selectedNutrientType) { _, newValue in
-                        guard newValue != nil else { return }
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            proxy.scrollTo("selected-nutrition-chart", anchor: .top)
-                        }
-                    }
                 }
             }
         }
@@ -199,6 +178,9 @@ private struct NutrientsDatePickerCard: View {
 
 private struct NutrientsProgressCard: View {
     let nutrients: [Nutrient]
+    let selectedDate: Date
+    let logs: [FoodLog]
+    @Binding var selectedTimePeriod: TimePeriod
     let selectedNutrientType: NutrientType?
     let onSelect: (NutrientType) -> Void
 
@@ -222,6 +204,28 @@ private struct NutrientsProgressCard: View {
                     .padding(.vertical, 14)
                 }
                 .buttonStyle(.plain)
+
+                if selectedNutrientType == nutrient.type {
+                    VStack(spacing: 12) {
+                        TimePeriodSelector(selectedPeriod: $selectedTimePeriod)
+
+                        NutritionTrendCard(
+                            timePeriod: selectedTimePeriod,
+                            referenceDate: selectedDate,
+                            logs: logs,
+                            nutrientType: nutrient.type,
+                            nutrientGoal: nutrient.target
+                        )
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 14)
+                    .transition(
+                        .asymmetric(
+                            insertion: .opacity.combined(with: .scale(scale: 0.98, anchor: .top)),
+                            removal: .opacity
+                        )
+                    )
+                }
 
                 if index < nutrients.count - 1 {
                     Divider()
@@ -555,7 +559,7 @@ struct NutrientRow: View {
                 .frame(height: 8)
             }
             
-            Image(systemName: "chevron.right")
+            Image(systemName: isSelected ? "chevron.down" : "chevron.right")
                 .font(.caption)
                 .foregroundStyle(isSelected ? nutrient.type.color : .secondary)
         }
