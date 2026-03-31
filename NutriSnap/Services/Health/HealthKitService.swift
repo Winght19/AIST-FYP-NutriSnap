@@ -55,19 +55,35 @@ final class HealthKitService {
         to endDate: Date,
         unit: HKUnit
     ) async -> Double {
-        do {
-            let values = try await fetchActivityValues(
-                identifier: identifier,
-                unit: unit,
-                from: startDate,
-                to: endDate,
-                interval: DateComponents(day: 1),
-                anchorDate: startDate
-            )
-            return values.values.reduce(0, +)
-        } catch {
-            print("Failed to fetch \(identifier.rawValue): \(error)")
+        guard let quantityType = HKObjectType.quantityType(forIdentifier: identifier) else {
+            print("❌ HK: invalid quantity type \(identifier.rawValue)")
             return 0
+        }
+
+        let predicate = HKQuery.predicateForSamples(
+            withStart: startDate,
+            end: endDate,
+            options: .strictStartDate
+        )
+
+        return await withCheckedContinuation { continuation in
+            let query = HKStatisticsQuery(
+                quantityType: quantityType,
+                quantitySamplePredicate: predicate,
+                options: .cumulativeSum
+            ) { _, statistics, error in
+                if let error = error {
+                    print("❌ HK query error for \(identifier.rawValue): \(error.localizedDescription)")
+                    continuation.resume(returning: 0)
+                    return
+                }
+
+                let value = statistics?.sumQuantity()?.doubleValue(for: unit) ?? 0
+                print("🔍 HK direct query \(identifier.rawValue): total=\(value), range=\(startDate)...\(endDate)")
+                continuation.resume(returning: value)
+            }
+
+            healthStore.execute(query)
         }
     }
 
@@ -77,6 +93,48 @@ final class HealthKitService {
         }
 
         try await requestAuthorization()
+
+        // Debug: check authorization status for each type
+        if let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) {
+            let status = healthStore.authorizationStatus(for: stepType)
+            let statusStr: String
+            switch status {
+            case .notDetermined: statusStr = "notDetermined"
+            case .sharingDenied: statusStr = "sharingDenied"
+            case .sharingAuthorized: statusStr = "sharingAuthorized"
+            @unknown default: statusStr = "unknown"
+            }
+            print("🔐 HK stepCount auth status: \(statusStr)")
+
+            // Diagnostic: try to fetch raw step samples from last 7 days
+            let sevenDaysAgo = calendar.date(byAdding: .day, value: -7, to: Date())!
+            let predicate = HKQuery.predicateForSamples(withStart: sevenDaysAgo, end: Date(), options: [])
+            let samples: [HKQuantitySample] = await withCheckedContinuation { continuation in
+                let sampleQuery = HKSampleQuery(
+                    sampleType: stepType,
+                    predicate: predicate,
+                    limit: 5,
+                    sortDescriptors: [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: false)]
+                ) { _, results, error in
+                    if let error = error {
+                        print("🔬 HK diagnostic sample query error: \(error.localizedDescription)")
+                    }
+                    continuation.resume(returning: (results as? [HKQuantitySample]) ?? [])
+                }
+                healthStore.execute(sampleQuery)
+            }
+            if samples.isEmpty {
+                print("🚨 HK DIAGNOSTIC: 0 step samples found in last 7 days — this confirms READ PERMISSION IS DENIED")
+                print("🚨 Please go to: Settings → Health → Data Access & Devices → NutriSnap → Turn ON all categories")
+                print("🚨 If NutriSnap doesn't appear there, the HealthKit capability may not be properly configured in Xcode")
+            } else {
+                print("✅ HK DIAGNOSTIC: Found \(samples.count) step samples in last 7 days:")
+                for s in samples {
+                    let steps = s.quantity.doubleValue(for: .count())
+                    print("   📊 \(s.startDate) → \(s.endDate): \(steps) steps")
+                }
+            }
+        }
 
         let now = Date()
         let startOfDay = calendar.startOfDay(for: now)
@@ -112,11 +170,11 @@ final class HealthKitService {
         async let sleep = fetchSleepBreakdown(referenceDate: now)
 
         return HealthDashboardMetrics(
-            steps: try await steps,
-            exerciseMinutes: try await exerciseMinutes,
-            standMinutes: try await standMinutes,
-            activeEnergyBurned: try await activeEnergyBurned,
-            sleep: try await sleep
+            steps: await steps,
+            exerciseMinutes: await exerciseMinutes,
+            standMinutes: await standMinutes,
+            activeEnergyBurned: await activeEnergyBurned,
+            sleep: await sleep
         )
     }
 
@@ -271,9 +329,11 @@ final class HealthKitService {
 
     private func requestAuthorization() async throws {
         var readTypes = Set<HKObjectType>()
+        var writeTypes = Set<HKSampleType>()
 
         if let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) {
             readTypes.insert(stepType)
+            writeTypes.insert(stepType)
         }
         if let exerciseType = HKObjectType.quantityType(forIdentifier: .appleExerciseTime) {
             readTypes.insert(exerciseType)
@@ -283,25 +343,26 @@ final class HealthKitService {
         }
         if let activeEnergyType = HKObjectType.quantityType(forIdentifier: .activeEnergyBurned) {
             readTypes.insert(activeEnergyType)
+            writeTypes.insert(activeEnergyType)
         }
         if let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) {
             readTypes.insert(sleepType)
         }
 
-        try await healthStore.requestAuthorization(toShare: [], read: readTypes)
+        try await healthStore.requestAuthorization(toShare: writeTypes, read: readTypes)
     }
 
     // Removed sumQuantity since safeSumQuantity now uses fetchActivityValues
 
-    private func fetchSleepBreakdown(referenceDate: Date) async throws -> SleepBreakdown {
+    private func fetchSleepBreakdown(referenceDate: Date) async -> SleepBreakdown {
         guard HKHealthStore.isHealthDataAvailable() else {
-            throw HealthKitServiceError.unavailable
+            return SleepBreakdown()
         }
 
-        try await requestAuthorization()
+        try? await requestAuthorization()
 
         let window = sleepQueryWindow(for: referenceDate, queryEnd: referenceDate)
-        let samples = try await fetchSleepSamples(from: window.queryStart, to: window.queryEnd)
+        let samples = (try? await fetchSleepSamples(from: window.queryStart, to: window.queryEnd)) ?? []
 
         return sleepBreakdown(
             from: samples,

@@ -441,7 +441,7 @@ class NutritionEstimationPipeline: ObservableObject {
 struct NutritionLoadingView: View {
     var body: some View {
         ZStack {
-            Color.white.ignoresSafeArea()
+            Color(uiColor: .systemBackground).ignoresSafeArea()
             
             VStack(spacing: 24) {
                 Spacer()
@@ -449,11 +449,11 @@ struct NutritionLoadingView: View {
                 HStack(spacing: 6) {
                     Text("Calculating the nutritions for you")
                         .font(.body.weight(.semibold))
-                        .foregroundColor(.black)
+                        .foregroundColor(.primary)
                         .multilineTextAlignment(.center)
                     Image(systemName: "sparkle")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.black)
+                        .foregroundColor(.primary)
                 }
                 Spacer()
             }
@@ -541,14 +541,14 @@ struct NutritionConfirmationView: View {
                 Button(action: onDelete) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(.black)
+                        .foregroundColor(.primary)
                 }
                 
                 Spacer()
                 
                 Text("Review Your Meal")
                     .font(.headline)
-                    .foregroundColor(.black)
+                    .foregroundColor(.primary)
                 
                 Spacer()
                 
@@ -597,7 +597,7 @@ struct NutritionConfirmationView: View {
                                 if isEditingFoodName {
                                     TextField("Food name", text: $editedFoodName)
                                         .font(.title3.weight(.bold))
-                                        .foregroundColor(.black)
+                                        .foregroundColor(.primary)
                                         .focused($isFoodNameFocused)
                                         .onSubmit {
                                             isEditingFoodName = false
@@ -605,7 +605,7 @@ struct NutritionConfirmationView: View {
                                 } else {
                                     Text(editedFoodName)
                                         .font(.title3.weight(.bold))
-                                        .foregroundColor(.black)
+                                        .foregroundColor(.primary)
                                         .onTapGesture {
                                             isEditingFoodName = true
                                             isFoodNameFocused = true
@@ -715,7 +715,7 @@ struct NutritionConfirmationView: View {
                             
                             Text(servings == 1.0 ? "1 Serving" : String(format: "%.1f Serving", servings))
                                 .font(.body.weight(.medium))
-                                .foregroundColor(.black)
+                                .foregroundColor(.primary)
                             
                             Spacer()
                             
@@ -742,7 +742,7 @@ struct NutritionConfirmationView: View {
                             HStack {
                                 Text("Meal Type")
                                     .font(.title3.weight(.bold))
-                                    .foregroundColor(.black)
+                                    .foregroundColor(.primary)
                                 Spacer()
                             }
                             ScrollView(.horizontal, showsIndicators: false) {
@@ -774,7 +774,7 @@ struct NutritionConfirmationView: View {
                             HStack {
                                 Text("Nutrition")
                                     .font(.title3.weight(.bold))
-                                    .foregroundColor(.black)
+                                    .foregroundColor(.primary)
                                 
                                 Spacer()
                             }
@@ -851,7 +851,7 @@ struct NutritionConfirmationView: View {
             .padding(.bottom, 16)
             .padding(.top, 8)
         }
-        .background(Color.white)
+        .background(Color(uiColor: .systemBackground))
         .onTapGesture {
             isFoodNameFocused = false
             focusedNutritionField = nil
@@ -898,14 +898,14 @@ struct NutritionConfirmationView: View {
         HStack {
             Text(label)
                 .font(.body)
-                .foregroundColor(.black)
+                .foregroundColor(.primary)
             
             Spacer()
             
             HStack(spacing: 4) {
                 TextField("", text: editValue)
                     .font(.body)
-                    .foregroundColor(.black)
+                    .foregroundColor(.primary)
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
                     .frame(width: 80)
@@ -913,7 +913,7 @@ struct NutritionConfirmationView: View {
                 
                 Text(suffix)
                     .font(.body)
-                    .foregroundColor(.black)
+                    .foregroundColor(.primary)
             }
             .onTapGesture {
                 focusedNutritionField = fieldKey

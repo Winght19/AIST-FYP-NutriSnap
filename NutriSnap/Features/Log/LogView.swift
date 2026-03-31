@@ -313,12 +313,12 @@ struct FoodLogDetailView: View {
                 Button(action: { dismiss() }) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(.black)
+                        .foregroundColor(.primary)
                 }
                 Spacer()
                 Text("Record")
                     .font(.headline)
-                    .foregroundColor(.black)
+                    .foregroundColor(.primary)
                 Spacer()
                 Image(systemName: "chevron.left")
                     .font(.system(size: 18, weight: .medium))
@@ -375,13 +375,13 @@ struct FoodLogDetailView: View {
                         if isEditingFoodName {
                             TextField("Food name", text: $editedFoodName)
                                 .font(.title3.weight(.bold))
-                                .foregroundColor(.black)
+                                .foregroundColor(.primary)
                                 .focused($isFoodNameFocused)
                                 .onSubmit { isEditingFoodName = false }
                         } else {
                             Text(editedFoodName)
                                 .font(.title3.weight(.bold))
-                                .foregroundColor(.black)
+                                .foregroundColor(.primary)
                                 .onTapGesture {
                                     isEditingFoodName = true
                                     isFoodNameFocused = true
@@ -409,7 +409,7 @@ struct FoodLogDetailView: View {
                         HStack {
                             Text("Meal Type")
                                 .font(.title3.weight(.bold))
-                                .foregroundColor(.black)
+                                .foregroundColor(.primary)
                             Spacer()
                         }
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -440,7 +440,7 @@ struct FoodLogDetailView: View {
                         HStack {
                             Text("Nutrition")
                                 .font(.title3.weight(.bold))
-                                .foregroundColor(.black)
+                                .foregroundColor(.primary)
                             Spacer()
                         }
                         nutritionRow(label: "Calories", editValue: $editedCalories, suffix: "kcal", fieldKey: "calories")
@@ -470,7 +470,7 @@ struct FoodLogDetailView: View {
             .padding(.bottom, 16)
             .padding(.top, 8)
         }
-        .background(Color.white)
+        .background(Color(uiColor: .systemBackground))
         .navigationBarHidden(true)
         .onTapGesture {
             isFoodNameFocused = false
@@ -554,19 +554,19 @@ struct FoodLogDetailView: View {
         HStack {
             Text(label)
                 .font(.body)
-                .foregroundColor(.black)
+                .foregroundColor(.primary)
             Spacer()
             HStack(spacing: 4) {
                 TextField("", text: editValue)
                     .font(.body)
-                    .foregroundColor(.black)
+                    .foregroundColor(.primary)
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
                     .frame(width: 80)
                     .focused($focusedField, equals: fieldKey)
                 Text(suffix)
                     .font(.body)
-                    .foregroundColor(.black)
+                    .foregroundColor(.primary)
             }
             .onTapGesture { focusedField = fieldKey }
         }

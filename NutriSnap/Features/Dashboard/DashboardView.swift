@@ -351,7 +351,9 @@ struct HomeView: View {
     private func refreshHealthMetrics() async {
         do {
             healthMetrics = try await HealthKitService.shared.fetchDashboardMetrics()
+            print("✅ HealthKit metrics loaded: steps=\(healthMetrics.steps), exercise=\(healthMetrics.exerciseMinutes), active=\(healthMetrics.activeEnergyBurned)")
         } catch {
+            print("❌ HealthKit fetch failed: \(error.localizedDescription)")
             healthMetrics = .empty
         }
     }

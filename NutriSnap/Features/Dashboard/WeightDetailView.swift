@@ -13,25 +13,15 @@ struct WeightDetailView: View {
     @State private var editingEntry: WeightEntry? = nil
     
     @State private var selectedTimePeriod: TimePeriod = .month
+    @State private var referenceDate = Date()
     @State private var showingTargetAlert = false
     @State private var targetInput = ""
     
     private let syncService = SyncService()
     
     private var chartDateRange: ClosedRange<Date> {
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: Date())
-        let end = today.addingTimeInterval(86400 - 1)
-        
-        let start: Date
-        switch selectedTimePeriod {
-        case .day: start = today
-        case .week: start = calendar.date(byAdding: .day, value: -6, to: today)!
-        case .month: start = calendar.date(byAdding: .day, value: -29, to: today)!
-        case .sixMonths: start = calendar.date(byAdding: .month, value: -5, to: today)!
-        case .year: start = calendar.date(byAdding: .month, value: -11, to: today)!
-        }
-        return start...end
+        let config = selectedTimePeriod.staticChartConfig(referenceDate: referenceDate)
+        return config.startDate...config.queryEndDate
     }
     
     private var filteredEntries: [WeightEntry] {
@@ -64,24 +54,19 @@ struct WeightDetailView: View {
                         }
                     }
                     
-                    WeightTimePeriodSelector(selectedPeriod: $selectedTimePeriod)
-                        .padding(.vertical, 8)
+                    VStack(spacing: 8) {
+                        TimePeriodSelector(selectedPeriod: $selectedTimePeriod, periods: [.week, .month, .sixMonths, .year])
+                            .padding(.vertical, 8)
+                            
+                        PeriodSelectionRow(timePeriod: selectedTimePeriod, referenceDate: $referenceDate)
+                            .padding(.bottom, 8)
+                    }
                     
-                    if filteredEntries.isEmpty {
-                        VStack(spacing: 12) {
-                            Image(systemName: "chart.xyaxis.line")
-                                .font(.system(size: 40))
-                                .foregroundColor(.gray.opacity(0.5))
-                            Text("No weight data found in this period.")
-                                .foregroundColor(.secondary)
-                        }
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .frame(height: 200)
-                    } else {
-                        let targetW = appStateManager.currentUser?.targetWeight ?? 65.0
-                        let maxW = filteredEntries.map { $0.weight }.max() ?? targetW
-                        
-                        Chart {
+                    let targetW = appStateManager.currentUser?.targetWeight ?? 65.0
+                    let actualMaxY = filteredEntries.map { $0.weight }.max() ?? targetW
+                    let maxW = max(actualMaxY, targetW)
+                    
+                    Chart {
                             // Target Line
                             RuleMark(y: .value("Target", targetW))
                                 .lineStyle(StrokeStyle(lineWidth: 1.5, dash: [5, 5]))
@@ -160,7 +145,6 @@ struct WeightDetailView: View {
                             }
                         }
                         .frame(height: 250)
-                    }
                 }
                 .padding()
                 .background(Color(UIColor.secondarySystemGroupedBackground))
@@ -286,6 +270,9 @@ struct WeightDetailView: View {
             }
             .presentationDetents([.medium])
         }
+        .onChange(of: selectedTimePeriod) { _, newPeriod in
+            referenceDate = newPeriod.canonicalReferenceDate(for: min(referenceDate, Date()))
+        }
     }
     
     // MARK: - Actions
@@ -341,32 +328,6 @@ struct WeightDetailView: View {
         // Note: Supabase deletion would require a DELETE endpoint.
         // For now, the record is removed locally. On next pull, if it
         // still exists remotely, it will be re-created.
-    }
-}
-
-// Custom Selector to match User's Image requirements
-struct WeightTimePeriodSelector: View {
-    @Binding var selectedPeriod: TimePeriod
-    @Namespace private var animation
-    
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach([TimePeriod.week, .month, .sixMonths, .year], id: \.self) { period in
-                Button(action: {
-                    withAnimation {
-                        selectedPeriod = period
-                    }
-                }) {
-                    Text(period.title)
-                        .font(.system(size: 16))
-                        .fontWeight(selectedPeriod == period ? .bold : .medium)
-                        .foregroundStyle(selectedPeriod == period ? Color.red : Color.red.opacity(0.4))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 8)
-                }
-            }
-        }
-        .padding(.horizontal, 16)
     }
 }
 

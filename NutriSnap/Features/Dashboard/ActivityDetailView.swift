@@ -522,11 +522,12 @@ struct ActivityTypeButton: View {
 // MARK: - Time Period Selector
 struct TimePeriodSelector: View {
     @Binding var selectedPeriod: TimePeriod
+    var periods: [TimePeriod] = [.day, .week, .month, .sixMonths, .year]
     @Namespace private var animation
     
     var body: some View {
         HStack(spacing: 0) {
-            ForEach([TimePeriod.day, .week, .month, .sixMonths, .year], id: \.self) { period in
+            ForEach(periods, id: \.self) { period in
                 Button(action: {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
                         selectedPeriod = period

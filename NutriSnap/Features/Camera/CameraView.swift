@@ -300,7 +300,7 @@ struct CameraView: View {
                             }
                         }
                         .padding()
-                        .background(Color.white)
+                        .background(Color(uiColor: .systemBackground))
                         .cornerRadius(10)
                         .shadow(radius: 5)
                     case .idle:
@@ -315,7 +315,7 @@ struct CameraView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Color.white)
+                .background(Color(uiColor: .systemBackground))
                 .zIndex(4)
 
             case .error(let message):
@@ -327,7 +327,7 @@ struct CameraView: View {
                     }
                 }
                 .padding()
-                .background(Color.white)
+                .background(Color(uiColor: .systemBackground))
                 .cornerRadius(10)
                 .shadow(radius: 5)
                 .zIndex(5)
@@ -368,17 +368,27 @@ struct CameraView: View {
 }
 
 // MARK: - 4. Video Preview Bridge
+class VideoPreviewView: UIView {
+    override class var layerClass: AnyClass {
+        return AVCaptureVideoPreviewLayer.self
+    }
+    var videoPreviewLayer: AVCaptureVideoPreviewLayer {
+        return layer as! AVCaptureVideoPreviewLayer
+    }
+}
+
 struct CameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
-    func makeUIView(context: Context) -> UIView {
-        let view = UIView()
-        let layer = AVCaptureVideoPreviewLayer(session: session)
-        layer.videoGravity = .resizeAspectFill
-        view.layer.addSublayer(layer)
+    
+    func makeUIView(context: Context) -> VideoPreviewView {
+        let view = VideoPreviewView()
+        view.videoPreviewLayer.session = session
+        view.videoPreviewLayer.videoGravity = .resizeAspectFill
         return view
     }
-    func updateUIView(_ uiView: UIView, context: Context) {
-        uiView.layer.sublayers?.first?.frame = uiView.bounds
+    
+    func updateUIView(_ uiView: VideoPreviewView, context: Context) {
+        uiView.videoPreviewLayer.session = session
     }
 }
 
@@ -403,8 +413,7 @@ struct ProcessingView: View {
                     Color.gray.opacity(0.3)
                 }
                 
-                // 2. White Overlay (Heavy fade)
-                Color.white.opacity(0.85)
+                Color(uiColor: .systemBackground).opacity(0.85)
                 
                 // 3. Centered Content
                 VStack(spacing: 20) {
@@ -414,16 +423,14 @@ struct ProcessingView: View {
                             DotView(index: index)
                         }
                     }
-                    
-                    // Text + Sparkle
                     HStack(spacing: 6) {
                         Text("Identifying the food")
                             .font(.system(size: 18, weight: .bold))
-                            .foregroundColor(.black)
+                            .foregroundColor(.primary)
                         
                         Image(systemName: "sparkle")
                             .font(.system(size: 16, weight: .bold))
-                            .foregroundColor(.black)
+                            .foregroundColor(.primary)
                     }
                 }
             }
@@ -434,7 +441,7 @@ struct ProcessingView: View {
             
             Spacer()
         }
-        .background(Color.white.opacity(0.01)) // Transparent touch shield
+        .background(Color(uiColor: .systemBackground).opacity(0.01)) // Transparent touch shield
     }
 }
 

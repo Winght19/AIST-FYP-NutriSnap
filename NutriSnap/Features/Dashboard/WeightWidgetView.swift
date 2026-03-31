@@ -12,7 +12,7 @@ struct WeightWidgetView: View {
     
     // Derived values
     private var currentWeight: Double? {
-        recentWeights.first?.weight ?? appStateManager.currentUser?.weight
+        recentWeights.first?.weight
     }
     
     private var previousWeight: Double? {
@@ -128,20 +128,20 @@ struct WeightWidgetView: View {
                     let endOfToday = calendar.startOfDay(for: Date()).addingTimeInterval(86400 - 1)
                     let thirtyDaysAgo = calendar.date(byAdding: .day, value: -29, to: calendar.startOfDay(for: Date()))!
                     let lastMonthData = recentWeights.filter { $0.date >= thirtyDaysAgo }
+                    let sortedData = lastMonthData.sorted(by: { $0.date < $1.date }) // chronologically
+                    let actualMin = sortedData.map { $0.weight }.min() ?? targetWeight
+                    let actualMax = sortedData.map { $0.weight }.max() ?? targetWeight
+                    let minY = actualMin - 2.0
+                    let maxY = actualMax + 2.0
                     
-                    if !lastMonthData.isEmpty {
-                        let sortedData = lastMonthData.sorted(by: { $0.date < $1.date }) // chronologically
-                        let minY = (sortedData.map { $0.weight }.min() ?? targetWeight) - 2.0
-                        let maxY = (sortedData.map { $0.weight }.max() ?? targetWeight) + 2.0
-                        
-                        Chart(sortedData) { entry in
-                            LineMark(
-                                x: .value("Date", entry.date),
-                                y: .value("Weight", entry.weight)
-                            )
-                            .interpolationMethod(.monotone)
-                            .foregroundStyle(Color.green)
-                            .lineStyle(StrokeStyle(lineWidth: 3))
+                    Chart(sortedData) { entry in
+                        LineMark(
+                            x: .value("Date", entry.date),
+                            y: .value("Weight", entry.weight)
+                        )
+                        .interpolationMethod(.monotone)
+                        .foregroundStyle(Color.green)
+                        .lineStyle(StrokeStyle(lineWidth: 3))
                             
                             PointMark(
                                 x: .value("Date", entry.date),
@@ -194,10 +194,6 @@ struct WeightWidgetView: View {
                         .frame(height: UIScreen.isSmallDevice ? 90 : 110)
                         .padding(.horizontal, 16)
                         .padding(.bottom, 16)
-                    } else {
-                        // Empty chart placeholder
-                        Spacer().frame(height: 110)
-                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Color(UIColor.secondarySystemGroupedBackground))
