@@ -181,6 +181,11 @@ final class HealthKitService {
     }
 
     func fetchSleepTotalsByDay(from startDate: Date, to endDate: Date) async throws -> [Date: Double] {
+        let breakdownsByDay = try await fetchSleepBreakdownsByDay(from: startDate, to: endDate)
+        return breakdownsByDay.mapValues(\.totalMinutes)
+    }
+
+    func fetchSleepBreakdownsByDay(from startDate: Date, to endDate: Date) async throws -> [Date: SleepBreakdown] {
         guard startDate <= endDate else { return [:] }
         guard HKHealthStore.isHealthDataAvailable() else {
             throw HealthKitServiceError.unavailable
@@ -195,7 +200,7 @@ final class HealthKitService {
         let queryEnd = min(Date(), calendar.date(byAdding: .hour, value: 12, to: endDay) ?? endDay)
         let samples = try await fetchSleepSamples(from: queryStart, to: queryEnd)
 
-        var valuesByDay: [Date: Double] = [:]
+        var valuesByDay: [Date: SleepBreakdown] = [:]
         var currentDay = startDay
 
         while currentDay <= endDay {
@@ -205,7 +210,7 @@ final class HealthKitService {
                 referenceDate: currentDay,
                 queryEnd: dayQueryEnd
             )
-            valuesByDay[currentDay] = breakdown?.totalMinutes ?? 0
+            valuesByDay[currentDay] = breakdown ?? SleepBreakdown()
             currentDay = calendar.date(byAdding: .day, value: 1, to: currentDay) ?? currentDay
         }
 
@@ -213,6 +218,11 @@ final class HealthKitService {
     }
 
     func fetchHourlySleepValues(referenceDate: Date) async throws -> [Date: Double] {
+        let breakdownsByHour = try await fetchHourlySleepBreakdowns(referenceDate: referenceDate)
+        return breakdownsByHour.mapValues(\.totalMinutes)
+    }
+
+    func fetchHourlySleepBreakdowns(referenceDate: Date) async throws -> [Date: SleepBreakdown] {
         guard HKHealthStore.isHealthDataAvailable() else {
             throw HealthKitServiceError.unavailable
         }
@@ -221,56 +231,36 @@ final class HealthKitService {
 
         let window = sleepQueryWindow(for: referenceDate, queryEnd: referenceDate)
         let samples = try await fetchSleepSamples(from: window.queryStart, to: window.queryEnd)
-        guard let session = mainSleepSession(
+        let stageIntervals = sleepStageIntervals(
             from: samples,
-            queryStart: window.queryStart,
-            queryEnd: window.queryEnd,
-            overnightStart: window.overnightStart,
-            overnightEnd: window.overnightEnd,
-            startOfDay: window.startOfDay
-        ) else {
+            within: nil,
+            queryStart: window.overnightStart,
+            queryEnd: window.queryEnd
+        )
+        let displayRange = sleepDisplayRange(for: stageIntervals)
+
+        guard let displayRange else {
             return [:]
         }
 
-        let asleepIntervals = mergedIntervals(
-            for: samples.compactMap { sample in
-                let overlap = overlapInterval(
-                    for: sample,
-                    within: session,
-                    queryStart: window.queryStart,
-                    queryEnd: window.queryEnd
-                )
-                guard let overlap else { return nil }
+        let rangeStartHour = calendar.dateInterval(of: .hour, for: displayRange.start)?.start ?? displayRange.start
+        var bucketStart = rangeStartHour
+        var valuesByHour: [Date: SleepBreakdown] = [:]
 
-                switch sample.value {
-                case HKCategoryValueSleepAnalysis.awake.rawValue,
-                     HKCategoryValueSleepAnalysis.inBed.rawValue:
-                    return nil
-                default:
-                    return overlap
-                }
-            }
-        )
-
-        let sessionStartHour = calendar.dateInterval(of: .hour, for: session.start)?.start ?? session.start
-        var bucketStart = sessionStartHour
-        var valuesByHour: [Date: Double] = [:]
-
-        while bucketStart < session.end {
+        while bucketStart < displayRange.end {
             let bucketEnd = min(
-                calendar.date(byAdding: .hour, value: 1, to: bucketStart) ?? session.end,
-                session.end
+                calendar.date(byAdding: .hour, value: 1, to: bucketStart) ?? displayRange.end,
+                displayRange.end
             )
 
             let bucketInterval = DateInterval(start: bucketStart, end: bucketEnd)
-            let minutes = asleepIntervals.reduce(0.0) { partial, interval in
-                let overlapStart = max(interval.start, bucketInterval.start)
-                let overlapEnd = min(interval.end, bucketInterval.end)
-                guard overlapEnd > overlapStart else { return partial }
-                return partial + overlapEnd.timeIntervalSince(overlapStart) / 60.0
-            }
-
-            valuesByHour[bucketStart] = minutes
+            valuesByHour[bucketStart] = SleepBreakdown(
+                inBedMinutes: overlapDurationMinutes(for: stageIntervals.inBed, within: bucketInterval),
+                awakeMinutes: overlapDurationMinutes(for: stageIntervals.awake, within: bucketInterval),
+                remMinutes: overlapDurationMinutes(for: stageIntervals.rem, within: bucketInterval),
+                coreMinutes: overlapDurationMinutes(for: stageIntervals.core, within: bucketInterval),
+                deepMinutes: overlapDurationMinutes(for: stageIntervals.deep, within: bucketInterval)
+            )
             bucketStart = calendar.date(byAdding: .hour, value: 1, to: bucketStart) ?? bucketEnd
         }
 
@@ -351,14 +341,14 @@ final class HealthKitService {
     private func sleepQueryWindow(
         for referenceDate: Date,
         queryEnd: Date? = nil
-    ) -> (startOfDay: Date, overnightStart: Date, overnightEnd: Date, queryStart: Date, queryEnd: Date) {
+    ) -> (overnightStart: Date, overnightEnd: Date, queryStart: Date, queryEnd: Date) {
         let startOfDay = calendar.startOfDay(for: referenceDate)
         let overnightStart = calendar.date(byAdding: .hour, value: -6, to: startOfDay) ?? referenceDate
         let overnightEnd = calendar.date(byAdding: .hour, value: 12, to: startOfDay) ?? referenceDate
         let queryStart = calendar.date(byAdding: .hour, value: -12, to: overnightStart) ?? overnightStart
         let effectiveQueryEnd = min(queryEnd ?? overnightEnd, overnightEnd)
 
-        return (startOfDay, overnightStart, overnightEnd, queryStart, effectiveQueryEnd)
+        return (overnightStart, overnightEnd, queryStart, effectiveQueryEnd)
     }
 
     private func sleepBreakdown(
@@ -369,17 +359,37 @@ final class HealthKitService {
         guard !samples.isEmpty else { return nil }
 
         let window = sleepQueryWindow(for: referenceDate, queryEnd: queryEnd)
-        let mainSession = mainSleepSession(
+        let stageIntervals = sleepStageIntervals(
             from: samples,
-            queryStart: window.queryStart,
-            queryEnd: window.queryEnd,
-            overnightStart: window.overnightStart,
-            overnightEnd: window.overnightEnd,
-            startOfDay: window.startOfDay
+            within: nil,
+            queryStart: window.overnightStart,
+            queryEnd: window.queryEnd
         )
+        let hasTrackedSleep = !sleepDisplayIntervals(for: stageIntervals).isEmpty
 
-        guard let mainSession else { return nil }
+        guard hasTrackedSleep else { return nil }
 
+        return SleepBreakdown(
+            inBedMinutes: durationMinutes(for: stageIntervals.inBed),
+            awakeMinutes: durationMinutes(for: stageIntervals.awake),
+            remMinutes: durationMinutes(for: stageIntervals.rem),
+            coreMinutes: durationMinutes(for: stageIntervals.core),
+            deepMinutes: durationMinutes(for: stageIntervals.deep)
+        )
+    }
+
+    private func sleepStageIntervals(
+        from samples: [HKCategorySample],
+        within session: DateInterval?,
+        queryStart: Date,
+        queryEnd: Date
+    ) -> (
+        inBed: [DateInterval],
+        awake: [DateInterval],
+        rem: [DateInterval],
+        core: [DateInterval],
+        deep: [DateInterval]
+    ) {
         var inBedIntervals: [DateInterval] = []
         var awakeIntervals: [DateInterval] = []
         var remIntervals: [DateInterval] = []
@@ -389,9 +399,9 @@ final class HealthKitService {
         for sample in samples {
             let overlap = overlapInterval(
                 for: sample,
-                within: mainSession,
-                queryStart: window.queryStart,
-                queryEnd: window.queryEnd
+                within: session,
+                queryStart: queryStart,
+                queryEnd: queryEnd
             )
             guard let overlap else { continue }
 
@@ -411,50 +421,52 @@ final class HealthKitService {
             }
         }
 
-        return SleepBreakdown(
-            inBedMinutes: mergedDurationMinutes(for: inBedIntervals),
-            awakeMinutes: mergedDurationMinutes(for: awakeIntervals),
-            remMinutes: mergedDurationMinutes(for: remIntervals),
-            coreMinutes: mergedDurationMinutes(for: coreIntervals),
-            deepMinutes: mergedDurationMinutes(for: deepIntervals)
+        return (
+            inBed: mergedIntervals(for: inBedIntervals),
+            awake: mergedIntervals(for: awakeIntervals),
+            rem: mergedIntervals(for: remIntervals),
+            core: mergedIntervals(for: coreIntervals),
+            deep: mergedIntervals(for: deepIntervals)
         )
     }
 
-    private func mainSleepSession(
-        from samples: [HKCategorySample],
-        queryStart: Date,
-        queryEnd: Date,
-        overnightStart: Date,
-        overnightEnd: Date,
-        startOfDay: Date
-    ) -> DateInterval? {
-        let sessionSeedIntervals = samples.compactMap { sample in
-            overlapInterval(for: sample, within: nil, queryStart: queryStart, queryEnd: queryEnd)
-        }
-
-        let sessions = mergedIntervals(for: sessionSeedIntervals, gapTolerance: 60 * 60)
-        guard !sessions.isEmpty else { return nil }
-
-        let overnightCandidates = sessions.filter { session in
-            session.end > overnightStart && session.start < overnightEnd
-        }
-
-        let preferredCandidates = overnightCandidates.filter { session in
-            session.end > startOfDay
-        }
-
-        return longestInterval(in: preferredCandidates)
-            ?? longestInterval(in: overnightCandidates)
-            ?? longestInterval(in: sessions)
+    private func sleepDisplayIntervals(
+        for stageIntervals: (
+            inBed: [DateInterval],
+            awake: [DateInterval],
+            rem: [DateInterval],
+            core: [DateInterval],
+            deep: [DateInterval]
+        )
+    ) -> [DateInterval] {
+        mergedIntervals(
+            for: stageIntervals.awake
+                + stageIntervals.rem
+                + stageIntervals.core
+                + stageIntervals.deep
+        )
     }
 
-    private func longestInterval(in intervals: [DateInterval]) -> DateInterval? {
-        intervals.max { lhs, rhs in
-            if lhs.duration == rhs.duration {
-                return lhs.end < rhs.end
-            }
-            return lhs.duration < rhs.duration
+    private func sleepDisplayRange(
+        for stageIntervals: (
+            inBed: [DateInterval],
+            awake: [DateInterval],
+            rem: [DateInterval],
+            core: [DateInterval],
+            deep: [DateInterval]
+        )
+    ) -> DateInterval? {
+        let trackedIntervals = sleepDisplayIntervals(for: stageIntervals)
+
+        if let first = trackedIntervals.first, let last = trackedIntervals.last {
+            return DateInterval(start: first.start, end: last.end)
         }
+
+        guard let first = stageIntervals.inBed.first, let last = stageIntervals.inBed.last else {
+            return nil
+        }
+
+        return DateInterval(start: first.start, end: last.end)
     }
 
     private func overlapInterval(
@@ -477,10 +489,18 @@ final class HealthKitService {
         return DateInterval(start: boundedStart, end: boundedEnd)
     }
 
-    private func mergedDurationMinutes(for intervals: [DateInterval]) -> Double {
-        let merged = mergedIntervals(for: intervals)
-        let seconds = merged.reduce(0.0) { $0 + $1.duration }
+    private func durationMinutes(for intervals: [DateInterval]) -> Double {
+        let seconds = intervals.reduce(0.0) { $0 + $1.duration }
         return seconds / 60.0
+    }
+
+    private func overlapDurationMinutes(for intervals: [DateInterval], within bucket: DateInterval) -> Double {
+        intervals.reduce(0.0) { partial, interval in
+            let overlapStart = max(interval.start, bucket.start)
+            let overlapEnd = min(interval.end, bucket.end)
+            guard overlapEnd > overlapStart else { return partial }
+            return partial + overlapEnd.timeIntervalSince(overlapStart) / 60.0
+        }
     }
 
     private func mergedIntervals(

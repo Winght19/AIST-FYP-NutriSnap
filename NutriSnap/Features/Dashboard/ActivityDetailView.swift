@@ -107,8 +107,11 @@ struct ActivityDetailView: View {
                 }
             }
         }
-        .onChange(of: selectedTimePeriod) { _, newPeriod in
-            selectedReferenceDate = newPeriod.canonicalReferenceDate(for: min(selectedReferenceDate, Date()))
+        .onChange(of: selectedTimePeriod) { oldPeriod, newPeriod in
+            selectedReferenceDate = newPeriod.referenceDateWhenSelecting(
+                from: oldPeriod,
+                previousReferenceDate: selectedReferenceDate
+            )
         }
     }
 }
@@ -187,6 +190,23 @@ enum TimePeriod {
 }
 
 extension TimePeriod {
+    func referenceDateWhenSelecting(
+        from previousPeriod: TimePeriod,
+        previousReferenceDate: Date,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> Date {
+        if self == .day, previousPeriod != .day {
+            return now
+        }
+
+        return navigationReferenceDate(
+            for: previousReferenceDate,
+            now: now,
+            calendar: calendar
+        )
+    }
+
     func canonicalReferenceDate(for date: Date, calendar: Calendar = .current) -> Date {
         switch self {
         case .day:
@@ -209,6 +229,19 @@ extension TimePeriod {
 
     func latestSelectableReferenceDate(now: Date = Date(), calendar: Calendar = .current) -> Date {
         canonicalReferenceDate(for: now, calendar: calendar)
+    }
+
+    func navigationReferenceDate(for date: Date, now: Date = Date(), calendar: Calendar = .current) -> Date {
+        let clampedDate = min(date, now)
+
+        switch self {
+        case .day:
+            return calendar.isDate(clampedDate, inSameDayAs: now)
+                ? now
+                : calendar.startOfDay(for: clampedDate)
+        case .week, .month, .sixMonths, .year:
+            return canonicalReferenceDate(for: clampedDate, calendar: calendar)
+        }
     }
 
     func shiftedReferenceDate(from referenceDate: Date, by value: Int, calendar: Calendar = .current) -> Date {
@@ -562,6 +595,10 @@ struct PeriodSelectionRow: View {
 
     @State private var isShowingPicker = false
 
+    private var isTodaySelected: Bool {
+        Calendar.current.isDate(referenceDate, inSameDayAs: Date())
+    }
+
     private var latestReferenceDate: Date {
         timePeriod.latestSelectableReferenceDate()
     }
@@ -588,6 +625,21 @@ struct PeriodSelectionRow: View {
             }
             .buttonStyle(.plain)
 
+            if timePeriod == .day {
+                Button(action: jumpToToday) {
+                    Text("Today")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 10)
+                        .frame(height: 28)
+                        .background(Color(uiColor: .secondarySystemGroupedBackground))
+                        .clipShape(Capsule())
+                        .opacity(isTodaySelected ? 0.65 : 1)
+                }
+                .buttonStyle(.plain)
+                .disabled(isTodaySelected)
+            }
+
             Button(action: { shift(by: 1) }) {
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
@@ -605,7 +657,13 @@ struct PeriodSelectionRow: View {
 
     private func shift(by value: Int) {
         let shiftedDate = timePeriod.shiftedReferenceDate(from: referenceDate, by: value)
-        referenceDate = min(shiftedDate, latestReferenceDate)
+        referenceDate = timePeriod.navigationReferenceDate(
+            for: min(shiftedDate, latestReferenceDate)
+        )
+    }
+
+    private func jumpToToday() {
+        referenceDate = Date()
     }
 }
 
@@ -808,7 +866,11 @@ struct PeriodSelectionSheet: View {
             selectedDate = calendar.date(from: DateComponents(year: tempYear, month: 1, day: 1)) ?? currentDate
         }
 
-        return timePeriod.canonicalReferenceDate(for: min(selectedDate, currentDate), calendar: calendar)
+        return timePeriod.navigationReferenceDate(
+            for: selectedDate,
+            now: currentDate,
+            calendar: calendar
+        )
     }
 }
 

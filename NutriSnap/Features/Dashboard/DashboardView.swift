@@ -657,19 +657,6 @@ struct SleepCard: View {
         UIScreen.isSmallDevice ? max(scaledDonutSize, 80) : max(scaledDonutSize, 90)
     }
 
-    private var sleepSegments: [(color: Color, value: Double)] {
-        [
-            (.orange, metrics.awakeMinutes),
-            (.cyan, metrics.remMinutes),
-            (.blue, metrics.coreMinutes),
-            (.indigo, metrics.deepMinutes)
-        ]
-    }
-
-    private var totalChartMinutes: Double {
-        max(sleepSegments.reduce(0) { $0 + $1.value }, 1)
-    }
-
     private var totalSleepText: String {
         formatDuration(minutes: metrics.totalMinutes)
     }
@@ -689,20 +676,12 @@ struct SleepCard: View {
                 // Donut Chart
                 Spacer()
                 ZStack {
-                    Circle()
-                        .stroke(Color.indigo.opacity(0.15), lineWidth: donutLineWidth)
-
-                    Circle()
-                        .trim(from: 0, to: totalSleepProgress)
-                        .stroke(
-                            AngularGradient(
-                                colors: [.cyan, .blue, .indigo],
-                                center: .center
-                            ),
-                            style: StrokeStyle(lineWidth: donutLineWidth, lineCap: .round)
-                        )
-                        .rotationEffect(.degrees(-90))
-                        .animation(.easeInOut(duration: 1.0), value: totalSleepProgress)
+                    SleepStageProgressRing(
+                        progress: totalSleepProgress,
+                        stages: metrics.sleepStageDetails,
+                        lineWidth: donutLineWidth,
+                        trackColor: .indigo.opacity(0.15)
+                    )
 
                     VStack(spacing: 2) {
                         Image(systemName: "moon.stars.fill")
@@ -745,19 +724,8 @@ struct SleepCard: View {
             .minimumScaleFactor(0.8)
             .lineLimit(1)
             .padding(.horizontal, 32)
-            .padding(.top, 16)
+        .padding(.top, 16)
         }
-    }
-
-    private func segmentStart(index: Int) -> CGFloat {
-        guard index > 0 else { return 0 }
-        let consumed = sleepSegments[..<index].reduce(0) { $0 + $1.value }
-        return CGFloat(consumed / totalChartMinutes)
-    }
-
-    private func segmentEnd(index: Int) -> CGFloat {
-        let consumed = sleepSegments[...index].reduce(0) { $0 + $1.value }
-        return CGFloat(consumed / totalChartMinutes)
     }
 
     private func formatDuration(minutes: Double) -> String {
@@ -765,21 +733,6 @@ struct SleepCard: View {
         let hours = roundedMinutes / 60
         let mins = roundedMinutes % 60
         return "\(hours)h \(mins)min"
-    }
-}
-
-// Helper for Sleep Chart
-struct TrimmedCircle: View {
-    var start: CGFloat
-    var end: CGFloat
-    var color: Color
-    var lineWidth: CGFloat = 12
-    
-    var body: some View {
-        Circle()
-            .trim(from: start, to: end)
-            .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .butt))
-            .rotationEffect(.degrees(-90))
     }
 }
 
