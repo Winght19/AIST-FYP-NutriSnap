@@ -25,3 +25,5 @@ DerivedData/
 # --- Fastlane (If you use it) ---
 fastlane/report.xml
 fastlane/screenshots
+
+report/

@@ -415,13 +415,17 @@ final class HealthKitService {
         try? await requestAuthorization()
 
         let window = sleepQueryWindow(for: referenceDate, queryEnd: referenceDate)
-        let samples = try await fetchSleepSamples(from: window.queryStart, to: window.queryEnd)
-
-        return sleepBreakdown(
-            from: samples,
-            referenceDate: referenceDate,
-            queryEnd: queryEnd
-        ) ?? SleepBreakdown()
+        
+        do {
+            let samples = try await fetchSleepSamples(from: window.queryStart, to: window.queryEnd)
+            return sleepBreakdown(
+                from: samples,
+                referenceDate: referenceDate,
+                queryEnd: referenceDate
+            ) ?? SleepBreakdown()
+        } catch {
+            return SleepBreakdown()
+        }
     }
 
     private func fetchSleepSamples(from startDate: Date, to endDate: Date) async throws -> [HKCategorySample] {
