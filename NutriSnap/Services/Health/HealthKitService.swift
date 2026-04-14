@@ -20,6 +20,27 @@ struct SleepBreakdown {
     }
 }
 
+enum SleepTimelineStage: String, CaseIterable, Hashable {
+    case awake
+    case rem
+    case core
+    case deep
+}
+
+struct SleepStageTimelineSegment: Identifiable, Hashable {
+    let stage: SleepTimelineStage
+    let interval: DateInterval
+
+    var id: String {
+        "\(stage.rawValue)-\(interval.start.timeIntervalSinceReferenceDate)-\(interval.end.timeIntervalSinceReferenceDate)"
+    }
+}
+
+struct SleepStageTimeline {
+    let displayRange: DateInterval
+    let segments: [SleepStageTimelineSegment]
+}
+
 struct HealthDashboardMetrics {
     var steps: Double = 0
     var exerciseMinutes: Double = 0
@@ -287,7 +308,8 @@ final class HealthKitService {
 
         try await requestAuthorization()
 
-        let window = sleepQueryWindow(for: referenceDate, queryEnd: referenceDate)
+        let queryEnd = effectiveSleepQueryEnd(for: referenceDate)
+        let window = sleepQueryWindow(for: referenceDate, queryEnd: queryEnd)
         let samples = try await fetchSleepSamples(from: window.queryStart, to: window.queryEnd)
         let stageIntervals = sleepStageIntervals(
             from: samples,
@@ -325,6 +347,39 @@ final class HealthKitService {
         return valuesByHour
     }
 
+    func fetchSleepStageTimeline(referenceDate: Date) async throws -> SleepStageTimeline? {
+        guard HKHealthStore.isHealthDataAvailable() else {
+            throw HealthKitServiceError.unavailable
+        }
+
+        try await requestAuthorization()
+
+        let queryEnd = effectiveSleepQueryEnd(for: referenceDate)
+        let window = sleepQueryWindow(for: referenceDate, queryEnd: queryEnd)
+        let samples = try await fetchSleepSamples(from: window.queryStart, to: window.queryEnd)
+        let stageIntervals = sleepStageIntervals(
+            from: samples,
+            within: nil,
+            queryStart: window.overnightStart,
+            queryEnd: window.queryEnd
+        )
+
+        guard let displayRange = sleepDisplayRange(for: stageIntervals) else {
+            return nil
+        }
+
+        let segments =
+            stageIntervals.awake.map { SleepStageTimelineSegment(stage: .awake, interval: $0) }
+            + stageIntervals.rem.map { SleepStageTimelineSegment(stage: .rem, interval: $0) }
+            + stageIntervals.core.map { SleepStageTimelineSegment(stage: .core, interval: $0) }
+            + stageIntervals.deep.map { SleepStageTimelineSegment(stage: .deep, interval: $0) }
+
+        return SleepStageTimeline(
+            displayRange: displayRange,
+            segments: segments.sorted { $0.interval.start < $1.interval.start }
+        )
+    }
+
     private func requestAuthorization() async throws {
         var readTypes = Set<HKObjectType>()
         var writeTypes = Set<HKSampleType>()
@@ -360,12 +415,12 @@ final class HealthKitService {
         try? await requestAuthorization()
 
         let window = sleepQueryWindow(for: referenceDate, queryEnd: referenceDate)
-        let samples = (try? await fetchSleepSamples(from: window.queryStart, to: window.queryEnd)) ?? []
+        let samples = try await fetchSleepSamples(from: window.queryStart, to: window.queryEnd)
 
         return sleepBreakdown(
             from: samples,
             referenceDate: referenceDate,
-            queryEnd: referenceDate
+            queryEnd: queryEnd
         ) ?? SleepBreakdown()
     }
 
@@ -410,6 +465,10 @@ final class HealthKitService {
         let effectiveQueryEnd = min(queryEnd ?? overnightEnd, overnightEnd)
 
         return (overnightStart, overnightEnd, queryStart, effectiveQueryEnd)
+    }
+
+    private func effectiveSleepQueryEnd(for referenceDate: Date, now: Date = Date()) -> Date {
+        min(now, sleepQueryWindow(for: referenceDate).overnightEnd)
     }
 
     private func sleepBreakdown(
