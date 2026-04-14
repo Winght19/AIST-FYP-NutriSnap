@@ -414,8 +414,9 @@ final class HealthKitService {
 
         try? await requestAuthorization()
 
-        let window = sleepQueryWindow(for: referenceDate, queryEnd: referenceDate)
-        let samples = try await fetchSleepSamples(from: window.queryStart, to: window.queryEnd)
+        let queryEnd = effectiveSleepQueryEnd(for: referenceDate)
+        let window = sleepQueryWindow(for: referenceDate, queryEnd: queryEnd)
+        let samples = (try? await fetchSleepSamples(from: window.queryStart, to: window.queryEnd)) ?? []
 
         return sleepBreakdown(
             from: samples,
