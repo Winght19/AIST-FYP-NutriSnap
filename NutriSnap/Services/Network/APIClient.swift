@@ -89,30 +89,27 @@ final class APIClient {
 
     // MARK: - Storage Upload
 
-    /// Uploads an image to Supabase Storage and returns the public URL.
-    /// The bucket should have RLS policies to restrict access to the owning user.
+    /// Uploads an image to Supabase Storage (PUT with upsert) and returns the storage path.
     func uploadImage(data: Data, bucket: String, path: String, token: String) async throws -> String {
         let storageURL = "https://sqgwalooucvabofnjrcx.supabase.co/storage/v1/object/\(bucket)/\(path)"
-        guard let url = URL(string: storageURL) else {
-            throw APIError.invalidURL
-        }
+        guard let url = URL(string: storageURL) else { throw APIError.invalidURL }
 
         var request = URLRequest(url: url)
-        request.httpMethod = "POST"
+        request.httpMethod = "PUT"                                   // Supabase Storage uses PUT
         request.setValue("image/jpeg", forHTTPHeaderField: "Content-Type")
         request.setValue(supabaseAnonKey, forHTTPHeaderField: "apikey")
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("true", forHTTPHeaderField: "x-upsert")    // allow overwrite
         request.httpBody = data
 
-        let (_, response) = try await URLSession.shared.data(for: request)
-
-        guard let http = response as? HTTPURLResponse,
-              (200..<300).contains(http.statusCode) else {
+        let (responseData, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+            if let body = String(data: responseData, encoding: .utf8) {
+                print("⚠️ Image upload failed (\(statusCode)): \(body)")
+            }
             throw APIError.httpError(statusCode)
         }
-
-        // Return the path that can be used to construct a signed/public URL
         return path
     }
 
@@ -132,6 +129,12 @@ final class APIClient {
         return try await execute(endpoint: endpoint, method: "PUT", bodyData: data, token: token, isREST: false)
     }
 
+    /// POST to the Supabase PostgREST REST API (e.g., for RPC calls like /rpc/my_function).
+    func restPost<T: Decodable, B: Encodable>(_ endpoint: String, body: B, token: String?) async throws -> T {
+        let data = try encoder.encode(body)
+        return try await execute(endpoint: endpoint, method: "POST", bodyData: data, token: token, isREST: true)
+    }
+
     /// Sends a DELETE request to the PostgREST REST API. Does not expect a response body.
     func delete(_ endpoint: String, token: String?) async throws {
         guard let url = URL(string: restURL + endpoint) else { throw APIError.invalidURL }
@@ -139,11 +142,18 @@ final class APIClient {
         request.httpMethod = "DELETE"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(supabaseAnonKey, forHTTPHeaderField: "apikey")
+        request.setValue("return=minimal, count=exact", forHTTPHeaderField: "Prefer")
         if let token { request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         else { request.setValue("Bearer \(supabaseAnonKey)", forHTTPHeaderField: "Authorization") }
-        let (_, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw APIError.httpError((response as? HTTPURLResponse)?.statusCode ?? -1)
+        let (responseData, response) = try await URLSession.shared.data(for: request)
+        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? -1
+        let rowsDeleted = (response as? HTTPURLResponse)?.value(forHTTPHeaderField: "Content-Range") ?? "unknown"
+        print("🗑 DELETE \(endpoint) → \(statusCode) | rows affected: \(rowsDeleted)")
+        if let body = String(data: responseData, encoding: .utf8), !body.isEmpty {
+            print("🗑 Response body: \(body)")
+        }
+        guard (200..<300).contains(statusCode) else {
+            throw APIError.httpError(statusCode)
         }
     }
 

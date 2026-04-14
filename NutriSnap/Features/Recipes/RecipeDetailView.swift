@@ -14,10 +14,10 @@ struct RecipeDetailView: View {
     @State private var selectedTab: DetailTab = .ingredients
     
     // Aesthetic Colors
-    let brandPink = Color(red: 1.0, green: 0.4, blue: 0.5) // Approximate pink from the UI
-    let brandGrayBG = Color(white: 0.95)
-    let brandPillGray = Color(white: 0.9)
-    let brandTextGray = Color(white: 0.4)
+    let brandPink = Color(red: 1.0, green: 0.4, blue: 0.5)
+    let brandGrayBG = Color(uiColor: .tertiarySystemFill)
+    let brandPillGray = Color(uiColor: .secondarySystemFill)
+    let brandTextGray = Color.secondary
     
     var body: some View {
         VStack(spacing: 0) {
@@ -29,7 +29,7 @@ struct RecipeDetailView: View {
             .padding(.horizontal, 20)
             .padding(.top, 10)
             .padding(.bottom, 10)
-            .background(.white) // Ensure it visually separates if needed, or clear
+            .background(Color(uiColor: .systemBackground))
             
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -140,7 +140,7 @@ struct RecipeDetailView: View {
                                             .foregroundColor(selectedTab == tab ? .primary : brandTextGray)
                                             .frame(maxWidth: .infinity)
                                             .padding(.vertical, 10)
-                                            .background(selectedTab == tab ? Color.white : Color.clear)
+                                            .background(selectedTab == tab ? Color(uiColor: .systemBackground) : Color.clear)
                                             .cornerRadius(20)
                                     }
                                 }
@@ -198,7 +198,7 @@ struct RecipeDetailView: View {
                         Text(ing.ingredientText)
                             .font(.subheadline)
                     }
-                    .foregroundColor(Color(white: 0.2))
+                    .foregroundColor(.primary)
                 }
             }
         } else {
@@ -225,7 +225,7 @@ struct RecipeDetailView: View {
                         // Step Text
                         Text(direction.stepText)
                             .font(.subheadline)
-                            .foregroundColor(Color(white: 0.2))
+                            .foregroundColor(.primary)
                     }
                 }
             }
@@ -253,13 +253,13 @@ struct RecipeDetailView: View {
                         Text(formatNutrientName(item.nutrient.name))
                             .font(.subheadline)
                             .fontWeight(.medium)
-                            .foregroundColor(Color(white: 0.2))
+                            .foregroundColor(.primary)
                         
                         Spacer()
                         
                         Text(String(format: "%.1f%@", item.amount, item.nutrient.unit.lowercased()))
                             .font(.subheadline)
-                            .foregroundColor(Color(white: 0.2))
+                            .foregroundColor(.primary)
                     }
                     .padding(.vertical, 16)
                     
@@ -294,9 +294,9 @@ struct BackButton: View {
         }) {
             Image(systemName: "chevron.left")
                 .font(.headline)
-                .foregroundColor(.black)
+                .foregroundColor(.primary)
                 .padding(8)
-                .background(Circle().fill(Color.white.opacity(0.8)))
+                .background(Circle().fill(Color(uiColor: .systemFill)))
         }
     }
 }

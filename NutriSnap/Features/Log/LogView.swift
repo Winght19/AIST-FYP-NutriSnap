@@ -122,17 +122,12 @@ struct LogsView: View {
     private func nextDay() {
         selectedDate = Calendar.current.date(byAdding: .day, value: 1, to: selectedDate) ?? selectedDate
     }
-
-    private func delete(_ log: FoodLog) {
-        FoodLogImageStore.shared.deleteImage(at: log.imagePath)
-        modelContext.delete(log)
-        try? modelContext.save()
-    }
 }
 
 struct LogEntryRow: View {
     let log: FoodLog
     let onDelete: () -> Void
+    @State private var showDeleteConfirm = false
 
     private var loadedImage: UIImage? {
         FoodLogImageStore.shared.image(for: log.imagePath)
@@ -255,11 +250,17 @@ struct LogEntryRow: View {
                 .buttonStyle(.plain)
 
                 // Trash delete button
-                Button(action: onDelete) {
+                Button(action: { showDeleteConfirm = true }) {
                     Image(systemName: "trash")
                         .font(.subheadline)
                         .foregroundColor(Color(red: 0.85, green: 0.55, blue: 0.55))
                         .padding(16)
+                }
+                .confirmationDialog("Delete \"\(log.foodName)\"?", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+                    Button("Delete", role: .destructive) { onDelete() }
+                    Button("Cancel", role: .cancel) {}
+                } message: {
+                    Text("This will permanently remove this food log entry.")
                 }
             }
         }
@@ -312,12 +313,12 @@ struct FoodLogDetailView: View {
                 Button(action: { dismiss() }) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 18, weight: .medium))
-                        .foregroundColor(.black)
+                        .foregroundColor(.primary)
                 }
                 Spacer()
                 Text("Record")
                     .font(.headline)
-                    .foregroundColor(.black)
+                    .foregroundColor(.primary)
                 Spacer()
                 Image(systemName: "chevron.left")
                     .font(.system(size: 18, weight: .medium))
@@ -374,13 +375,13 @@ struct FoodLogDetailView: View {
                         if isEditingFoodName {
                             TextField("Food name", text: $editedFoodName)
                                 .font(.title3.weight(.bold))
-                                .foregroundColor(.black)
+                                .foregroundColor(.primary)
                                 .focused($isFoodNameFocused)
                                 .onSubmit { isEditingFoodName = false }
                         } else {
                             Text(editedFoodName)
                                 .font(.title3.weight(.bold))
-                                .foregroundColor(.black)
+                                .foregroundColor(.primary)
                                 .onTapGesture {
                                     isEditingFoodName = true
                                     isFoodNameFocused = true
@@ -408,7 +409,7 @@ struct FoodLogDetailView: View {
                         HStack {
                             Text("Meal Type")
                                 .font(.title3.weight(.bold))
-                                .foregroundColor(.black)
+                                .foregroundColor(.primary)
                             Spacer()
                         }
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -439,7 +440,7 @@ struct FoodLogDetailView: View {
                         HStack {
                             Text("Nutrition")
                                 .font(.title3.weight(.bold))
-                                .foregroundColor(.black)
+                                .foregroundColor(.primary)
                             Spacer()
                         }
                         nutritionRow(label: "Calories", editValue: $editedCalories, suffix: "kcal", fieldKey: "calories")
@@ -469,7 +470,7 @@ struct FoodLogDetailView: View {
             .padding(.bottom, 16)
             .padding(.top, 8)
         }
-        .background(Color.white)
+        .background(Color(uiColor: .systemBackground))
         .navigationBarHidden(true)
         .onTapGesture {
             isFoodNameFocused = false
@@ -553,19 +554,19 @@ struct FoodLogDetailView: View {
         HStack {
             Text(label)
                 .font(.body)
-                .foregroundColor(.black)
+                .foregroundColor(.primary)
             Spacer()
             HStack(spacing: 4) {
                 TextField("", text: editValue)
                     .font(.body)
-                    .foregroundColor(.black)
+                    .foregroundColor(.primary)
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
                     .frame(width: 80)
                     .focused($focusedField, equals: fieldKey)
                 Text(suffix)
                     .font(.body)
-                    .foregroundColor(.black)
+                    .foregroundColor(.primary)
             }
             .onTapGesture { focusedField = fieldKey }
         }

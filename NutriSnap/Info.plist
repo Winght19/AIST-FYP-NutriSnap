@@ -15,11 +15,5 @@
 	</array>
 	<key>GIDClientID</key>
 	<string>457680671105-98sg1ineq10rkd0bo555jn61j830sbr4.apps.googleusercontent.com</string>
-	<key>NSHealthShareUsageDescription</key>
-	<string>NutriSnap reads your activity, active energy, and sleep data to personalize your dashboard insights.</string>
-	<key>NSHealthUpdateUsageDescription</key>
-	<string>NutriSnap may write nutrition and wellness data to Health when you choose to sync records.</string>
-	<key>NSCameraUsageDescription</key>
-	<string>NutriSnap needs camera access to take photos of your food for nutritional analysis.</string>
 </dict>
 </plist>

@@ -97,7 +97,7 @@ struct RecipesView: View {
                         
                         Spacer().frame(height: 100)
                     }
-                    .background(Color(red: 0.95, green: 0.98, blue: 0.93)) // Light greenish-yellow background
+                    .background(Color(uiColor: .systemGroupedBackground))
                 }
             }
             .navigationTitle("Recipes")
@@ -118,9 +118,9 @@ struct RecipesView: View {
                 Button(action: { showAIPage = true }) {
                     Image(systemName: "sparkles")
                         .font(.title2)
-                        .foregroundColor(.black)
+                        .foregroundColor(.white)
                         .padding(16)
-                        .background(Color(.systemGray6))
+                        .background(Color(red: 0.45, green: 0.73, blue: 1.0))
                         .clipShape(Circle())
                         .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 3)
                 }
@@ -182,7 +182,7 @@ struct RecipeSkeletonCard: View {
             }
         }
         .padding(16)
-        .background(Color.white)
+        .background(Color(uiColor: .secondarySystemGroupedBackground))
         .cornerRadius(16)
         .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
         .overlay(
@@ -244,7 +244,7 @@ struct RecipeCard: View {
             Text(title)
                 .font(.body)
                 .fontWeight(.bold)
-                .foregroundColor(.black)
+                .foregroundColor(.primary)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
                 .multilineTextAlignment(.leading)
@@ -259,7 +259,7 @@ struct RecipeCard: View {
                     Text(difficulty.capitalized)
                         .font(.subheadline)
                         .fontWeight(.bold)
-                        .foregroundColor(.black)
+                        .foregroundColor(.primary)
                 }
                 
                 VStack(alignment: .leading, spacing: 2) {
@@ -270,13 +270,13 @@ struct RecipeCard: View {
                     Text(calories)
                         .font(.subheadline)
                         .fontWeight(.bold)
-                        .foregroundColor(.black)
+                        .foregroundColor(.primary)
                 }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(Color.white)
+        .background(Color(uiColor: .secondarySystemGroupedBackground))
         .cornerRadius(16)
         .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
     }
@@ -288,9 +288,9 @@ struct AIAssistantButton: View {
         Button(action: {}) {
             Image(systemName: "sparkles")
                 .font(.title2)
-                .foregroundColor(.primary)
+                .foregroundColor(.white)
                 .padding(16)
-                .background(Color(.systemGray5))
+                .background(Color(red: 0.4, green: 0.6, blue: 0.2)) // Match brand green
                 .clipShape(Circle())
                 .shadow(color: .black.opacity(0.1), radius: 5, x: 0, y: 2)
         }

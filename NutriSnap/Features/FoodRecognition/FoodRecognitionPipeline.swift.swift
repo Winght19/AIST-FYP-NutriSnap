@@ -79,45 +79,46 @@ class FoodRecognitionPipeline: ObservableObject {
     
     // MARK: - Load Core ML Models
     private func loadModels() {
-        Task.detached(priority: .userInitiated) { [weak self] in
-            var loadedYOLO: VNCoreMLModel?
-            var loadedKeras: VNCoreMLModel?
-
-            // Load YOLOv8 model
-            if let yoloURL = Bundle.main.url(forResource: "food-reg_yolov8s", withExtension: "mlmodelc") ??
-                Bundle.main.url(forResource: "food-reg_yolov8s", withExtension: "mlpackage") {
-                do {
-                    let config = MLModelConfiguration()
-                    config.computeUnits = .all
-                    let mlModel = try MLModel(contentsOf: yoloURL, configuration: config)
-                    loadedYOLO = try VNCoreMLModel(for: mlModel)
-                    print("✓ YOLOv8 model loaded successfully")
-                } catch {
-                    print("Error loading YOLOv8 model: \(error)")
+        Task { [weak self] in
+            // Wait inside an attached generic task context
+            let (yolo, keras) = await Task.detached(priority: .userInitiated) {
+                var loadedYOLO: VNCoreMLModel?
+                var loadedKeras: VNCoreMLModel?
+                
+                // Load YOLOv8 model
+                if let yoloURL = Bundle.main.url(forResource: "food-reg_yolov8s", withExtension: "mlmodelc") ??
+                    Bundle.main.url(forResource: "food-reg_yolov8s", withExtension: "mlpackage") {
+                    do {
+                        let config = MLModelConfiguration()
+                        config.computeUnits = .all
+                        let mlModel = try MLModel(contentsOf: yoloURL, configuration: config)
+                        loadedYOLO = try VNCoreMLModel(for: mlModel)
+                        print("✓ YOLOv8 model loaded successfully")
+                    } catch {
+                        print("Error loading YOLOv8 model: \(error)")
+                    }
                 }
-            } else {
-                print("YOLOv8 model file not found in bundle")
-            }
-
-            // Load Keras fallback model
-            if let kerasURL = Bundle.main.url(forResource: "food-reg_food101xhklocal", withExtension: "mlmodelc") ??
-                Bundle.main.url(forResource: "food-reg_food101xhklocal", withExtension: "mlpackage") {
-                do {
-                    let config = MLModelConfiguration()
-                    config.computeUnits = .all
-                    let mlModel = try MLModel(contentsOf: kerasURL, configuration: config)
-                    loadedKeras = try VNCoreMLModel(for: mlModel)
-                    print("✓ Keras fallback model loaded successfully")
-                } catch {
-                    print("Error loading Keras model: \(error)")
+                
+                // Load Keras fallback model
+                if let kerasURL = Bundle.main.url(forResource: "food-reg_food101xhklocal", withExtension: "mlmodelc") ??
+                    Bundle.main.url(forResource: "food-reg_food101xhklocal", withExtension: "mlpackage") {
+                    do {
+                        let config = MLModelConfiguration()
+                        config.computeUnits = .all
+                        let mlModel = try MLModel(contentsOf: kerasURL, configuration: config)
+                        loadedKeras = try VNCoreMLModel(for: mlModel)
+                        print("✓ Keras fallback model loaded successfully")
+                    } catch {
+                        print("Error loading Keras model: \(error)")
+                    }
                 }
-            } else {
-                print("Keras model file not found in bundle")
-            }
-
+                
+                return (loadedYOLO, loadedKeras)
+            }.value
+            
             await MainActor.run {
-                self?.yoloModel = loadedYOLO
-                self?.kerasModel = loadedKeras
+                self?.yoloModel = yolo
+                self?.kerasModel = keras
                 self?.isModelLoading = false
             }
         }
@@ -342,7 +343,7 @@ struct FoodRecognitionLoadingView: View {
 
     var body: some View {
         ZStack {
-            Color.white.ignoresSafeArea()  // Solid white background over everything
+            Color(uiColor: .systemBackground).ignoresSafeArea()
 
             VStack(spacing: 24) {
                 Spacer()
@@ -350,12 +351,12 @@ struct FoodRecognitionLoadingView: View {
                 HStack(spacing: 6) {
                     Text(statusText)
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(.black)
+                        .foregroundColor(.primary)
                         .lineLimit(2)
                         .multilineTextAlignment(.center)
                     Image(systemName: "sparkle")
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.black)
+                        .foregroundColor(.primary)
                 }
                 Spacer()
             }
@@ -391,7 +392,7 @@ struct LoadingDotsView: View {
         HStack(spacing: 6) {
             ForEach(0..<3, id: \.self) { index in
                 Circle()
-                    .fill(animatingDot == index ? Color.black : Color.gray.opacity(0.3))
+                    .fill(animatingDot == index ? Color.primary : Color.gray.opacity(0.3))
                     .frame(width: 8, height: 8)
             }
         }
@@ -444,10 +445,10 @@ struct MealSelectionView: View {
                         HStack(spacing: 6) {
                             Text("What's your meal?")
                                 .font(.system(size: 20, weight: .bold))
-                                .foregroundColor(.black)
+                                .foregroundColor(.primary)
                             Image(systemName: "sparkle")
                                 .font(.system(size: 16, weight: .semibold))
-                                .foregroundColor(.black)
+                                .foregroundColor(.primary)
                         }
                         Spacer().frame(height: isLandscape ? 15 : 40)
                     }
@@ -492,7 +493,7 @@ struct MealSelectionView: View {
                             Text(prediction.label)
                                 .font(.system(size: selectedIndex == index ? 17 : 16,
                                              weight: selectedIndex == index ? .semibold : .regular))
-                                .foregroundColor(selectedIndex == index ? .black : .gray.opacity(0.6))
+                                .foregroundColor(selectedIndex == index ? .primary : .gray.opacity(0.6))
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 14)
                                 .background(
@@ -536,7 +537,7 @@ struct FoodRecognitionCameraView: View {
     var body: some View {
         ZStack {
             // Background - always white
-            Color.white
+            Color(uiColor: .systemBackground)
                 .ignoresSafeArea()
             
             // Only show camera when idle

@@ -17,9 +17,9 @@ struct RecipeAIRecommendationView: View {
     @State private var difficulty = ""
     
     // Theme Colors
-    let appBackground = Color(red: 0.95, green: 0.98, blue: 0.93)
-    let textDarkGreen = Color(red: 0.1, green: 0.3, blue: 0.2)
-    let bubbleLightGreen = Color(red: 0.82, green: 0.93, blue: 0.82)
+    let appBackground = Color(uiColor: .systemGroupedBackground)
+    let textDarkGreen = Color.primary
+    let bubbleLightGreen = Color(red: 0.82, green: 0.90, blue: 1.0)
     
     // Original Banner Colors
     let blueBackground = Color(red: 0.45, green: 0.73, blue: 1.0)
@@ -105,7 +105,7 @@ struct RecipeAIRecommendationView: View {
                                             Text(message.text)
                                                 .padding()
                                                 .background(bubbleLightGreen)
-                                                .foregroundColor(textDarkGreen)
+                                                .foregroundColor(.black)
                                                 .cornerRadius(16, corners: [.topLeft, .topRight, .bottomLeft])
                                             
                                             Text("SENT \(formattedTime(message.timestamp))")
@@ -147,7 +147,7 @@ struct RecipeAIRecommendationView: View {
                                                     }
                                                 }
                                                 .padding(16)
-                                                .background(Color.white)
+                                                .background(Color(uiColor: .secondarySystemBackground))
                                                 .cornerRadius(20)
                                                 .cornerRadius(4, corners: [.topLeft])
                                             }
@@ -173,7 +173,7 @@ struct RecipeAIRecommendationView: View {
                                                 Circle().fill(Color.gray.opacity(0.4)).frame(width: 8, height: 8)
                                             }
                                             .padding()
-                                            .background(Color.white)
+                                            .background(Color(uiColor: .secondarySystemBackground))
                                             .cornerRadius(16, corners: [.topRight, .bottomLeft, .bottomRight])
                                         }
                                         Spacer()
@@ -185,18 +185,18 @@ struct RecipeAIRecommendationView: View {
                             .padding(.top, 80) // Scrolled under glass
                             .padding(.bottom, 20)
                         }
-                        .onChange(of: viewModel.messages.count, perform: { _ in
+                        .onChange(of: viewModel.messages.count) { _, _ in
                             if let lastId = viewModel.messages.last?.id {
                                 withAnimation { proxy.scrollTo(lastId, anchor: .bottom) }
                             }
-                        })
-                        .onChange(of: viewModel.isTyping, perform: { newValue in
+                        }
+                        .onChange(of: viewModel.isTyping) { _, newValue in
                             if newValue {
                                 withAnimation { proxy.scrollTo("TypingBubble", anchor: .bottom) }
                             } else if let lastId = viewModel.messages.last?.id {
                                 withAnimation { proxy.scrollTo(lastId, anchor: .bottom) }
                             }
-                        })
+                        }
                     }
                     
                     chatBottomInputArea
@@ -337,7 +337,7 @@ struct RecipeAIRecommendationView: View {
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundColor(.white)
                         .padding(12)
-                        .background(Color(red: 0.5, green: 0.6, blue: 0.5)) // Dark greenish grey
+                        .background(Color(red: 0.25, green: 0.55, blue: 0.85))
                         .clipShape(Circle())
                 }
                 .disabled(promptText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -345,7 +345,7 @@ struct RecipeAIRecommendationView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
-            .background(Color.white)
+            .background(Color(uiColor: .systemBackground))
             .clipShape(Capsule())
             .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 5)
             .padding(.horizontal)
@@ -422,7 +422,7 @@ struct RecipeAIRecommendationView: View {
             .font(.body)
             .foregroundColor(.white)
             .padding(8)
-            .background(Color(red: 0.35, green: 0.65, blue: 0.45))
+            .background(Color(red: 0.45, green: 0.73, blue: 1.0))
             .clipShape(Circle())
     }
 }
@@ -453,7 +453,7 @@ struct FormDropdown: View {
                         .foregroundColor(.gray)
                 }
                 .padding()
-                .background(Color.white)
+                .background(Color(uiColor: .secondarySystemBackground))
                 .cornerRadius(8)
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.5), lineWidth: 1))
             }
@@ -475,7 +475,7 @@ struct DifficultyPill: View {
             Text(title)
                 .font(.caption)
                 .fontWeight(.semibold)
-                .foregroundColor(selected == title ? .white : .black)
+                .foregroundColor(selected == title ? .white : .primary)
                 .padding(.horizontal, 20)
                 .padding(.vertical, 8)
                 .background(selected == title ? activeGreen : inactiveGreen)

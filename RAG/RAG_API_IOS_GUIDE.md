@@ -6,8 +6,8 @@
 
 ## The Endpoint
 
-**URL (Local Dev):** `http://localhost:8000/api/recommend`
-*(Note: Replace `localhost:8000` with the production URL once this API is hosted on Render/Railway).*
+**URL (Local Dev):** `http://192.168.0.110:8000/api/recommend`
+*(Note: Replace `192.168.0.110:8000` with the production URL once this API is hosted on Render/Railway).*
 
 **Method:** `POST`
 
@@ -104,7 +104,7 @@ class AIChatViewModel: ObservableObject {
     @Published var isTyping: Bool = false
     
     // Replace with your actual hosted API URL later
-    let apiUrl = URL(string: "http://localhost:8000/api/recommend")!
+    let apiUrl = URL(string: "http://192.168.0.110:8000/api/recommend")!
     
     @MainActor
     func fetchRecommendation(query: String, userProfile: UserProfile) async {

@@ -9,7 +9,7 @@ class RecipeAIRecommendationViewModel: ObservableObject {
     @Published var isTyping: Bool = false
     @Published var errorMessage: String? = nil
     
-    private let apiUrl = URL(string: "http://localhost:8000/api/recommend")!
+    private let apiUrl = URL(string: "http://192.168.0.110:8000/api/recommend")!
     
     private init() {} // Singleton
     
